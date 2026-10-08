@@ -3,24 +3,25 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="theme-color" content="#040e09" />
+<meta name="theme-color" content="#7f9bab" />
 <title>JCC E-Library · Jhenaidah Cadet College</title>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('jcc:theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(e){}</script>
 <link rel="stylesheet" href="styles.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 </head>
 <body>
-<!-- AFTER -->
 <svg width="0" height="0" style="position:absolute">
-  <symbol id="crest" viewBox="0 0 100 100">
-    <image href="./jcc-logo.png" width="100" height="100" />
-  </symbol>
+  <symbol id="crest" viewBox="0 0 100 100"><image href="./jcc-logo.png" width="100" height="100" /></symbol>
 </svg>
+<div id="bg"><i></i><i></i><i></i></div>
 <div id="toasts"></div>
+<div id="lens"><canvas width="380" height="380"></canvas></div>
 
-<!-- AUTH SCREEN -->
+<!-- AUTH -->
 <section id="auth" class="screen on">
+  <button class="icon-btn float-theme" data-act="theme" aria-label="Toggle dark mode"></button>
   <div class="auth-grid">
     <aside class="art">
       <div class="brand-hero">
@@ -35,7 +36,7 @@
         <h2>Portal Sign In</h2>
         <label>User ID<input id="l-id" required autocomplete="username" placeholder="e.g. cadet_1024"></label>
         <label>Password<input id="l-pw" type="password" required autocomplete="current-password" placeholder="••••••••"></label>
-        <button class="btn gold">Sign In</button>
+        <button class="btn dark">Sign In</button>
         <p class="err" id="l-err"></p>
         <p class="sw">New Cadet or Faculty? <a href="#" data-sw="register">Request Account</a></p>
       </form>
@@ -54,7 +55,7 @@
         </label>
         <label>Password<input id="r-pw" type="password" required minlength="6" autocomplete="new-password" placeholder="Min. 6 characters"></label>
         <label>Confirm Password<input id="r-pw2" type="password" required autocomplete="new-password"></label>
-        <button class="btn gold">Submit Request</button>
+        <button class="btn dark">Submit Request</button>
         <p class="err" id="r-err"></p>
         <p class="sw">Already registered? <a href="#" data-sw="login">Sign In</a></p>
       </form>
@@ -62,7 +63,7 @@
   </div>
 </section>
 
-<!-- PENDING SCREEN -->
+<!-- PENDING -->
 <section id="pending" class="screen center">
   <div class="card wait glass">
     <div class="pulse"></div>
@@ -72,44 +73,79 @@
   </div>
 </section>
 
-<!-- LIBRARY MAIN SCREEN -->
+<!-- LIBRARY -->
 <section id="library" class="screen">
-  <header class="bar glass">
-    <div class="brand"><svg><use href="#crest"/></svg><span class="serif">JCC E-LIBRARY</span></div>
-    <div class="bar-r">
-      <span class="net" id="net"><i></i><span>Online</span></span>
-      <div class="chip-user"><b id="who"></b><em id="role"></em></div>
-      <button class="btn ghost" id="admin-btn" hidden>Admin Control <b id="adm-n" class="dot" hidden></b></button>
-      <button class="btn ghost" data-act="logout">Sign Out</button>
-    </div>
-  </header>
-  <main class="wrap">
-    <div class="stats-banner">
-      <div class="s-card"><span>Saved Offline</span><b id="st-saved">0</b></div>
-      <div class="s-card"><span>Total Catalog</span><b id="st-total">0</b></div>
-    </div>
-    <div class="tools">
-      <div class="search-bar">
-        <input id="search" type="search" placeholder="Search title, author, topic..." />
-        <select id="sort">
-          <option value="recent">Sort: Recently Added</option>
-          <option value="title">Sort: Title A-Z</option>
-          <option value="author">Sort: Author A-Z</option>
-        </select>
+  <div class="shell glass">
+    <header class="top">
+      <div class="brand"><svg><use href="#crest"/></svg><span class="serif">JCC E-Library</span></div>
+      <div class="navpill">
+        <nav id="nav">
+          <button data-f="all" class="on">Library</button>
+          <button data-f="recents">Recents</button>
+          <button data-f="fav">Favorites</button>
+          <button data-f="saved">Offline</button>
+        </nav>
+        <label class="sbox"><input id="search" type="search" placeholder="Search title, author…" /><button type="button" id="s-btn" aria-label="Search"><i data-i="search"></i></button></label>
       </div>
-      <div id="chips" class="chips"></div>
+      <div class="bar-r">
+        <span class="net" id="net"><i></i><span>Online</span></span>
+        <button class="icon-btn" data-act="theme" aria-label="Toggle dark mode"></button>
+        <div class="chip-user"><span class="av" id="av"></span><div><b id="who"></b><em id="role"></em></div></div>
+        <button class="btn ghost" id="admin-btn" hidden>Admin <b id="adm-n" class="dot" hidden></b></button>
+        <button class="btn ghost" data-act="logout">Sign Out</button>
+      </div>
+    </header>
+    <div class="hero" id="hero"></div>
+    <div id="chips" class="chips"></div>
+    <div class="sec-head">
+      <div><h2 id="sec-title">Library Catalog</h2><p id="sec-sub"><b id="st-total">0</b> books · <b id="st-saved">0</b> saved offline</p></div>
+      <label class="sortpill"><i data-i="filter" data-s="16"></i>
+        <select id="sort">
+          <option value="recent">Recently Added</option>
+          <option value="title">Title A-Z</option>
+          <option value="author">Author A-Z</option>
+        </select>
+      </label>
     </div>
     <div id="grid" class="grid"></div>
-  </main>
+  </div>
 </section>
 
-<!-- ADMIN CONTROL PANEL -->
+<!-- BOOK DETAIL -->
+<section id="detail" class="screen">
+  <div class="shell glass">
+    <header class="top">
+      <button class="btn ghost" id="d-back"><i data-i="back" data-s="18"></i> Library</button>
+      <div class="brand"><svg><use href="#crest"/></svg><span class="serif">JCC E-Library</span></div>
+      <div class="bar-r"><button class="icon-btn" data-act="theme" aria-label="Toggle dark mode"></button></div>
+    </header>
+    <div class="d-body">
+      <div id="d-cover"></div>
+      <div class="d-info">
+        <span class="tag" id="d-genre"></span>
+        <h1 id="d-title"></h1>
+        <p class="d-author" id="d-author"></p>
+        <div class="d-meta" id="d-meta"></div>
+        <div class="d-actions">
+          <button class="btn dark big" id="d-read"><i data-i="play" data-s="14"></i> Read now</button>
+          <button class="btn pill" id="d-fav"></button>
+          <button class="btn pill" id="d-save"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ADMIN -->
 <section id="admin" class="screen">
-  <header class="bar glass">
-    <div class="brand"><svg><use href="#crest"/></svg><span class="serif">Administration Portal</span></div>
-    <div class="bar-r"><button class="btn ghost" id="adm-back">← Back to Catalog</button></div>
-  </header>
-  <main class="wrap narrow">
+  <div class="shell glass narrow">
+    <header class="top">
+      <div class="brand"><svg><use href="#crest"/></svg><span class="serif">Administration</span></div>
+      <div class="bar-r">
+        <button class="icon-btn" data-act="theme" aria-label="Toggle dark mode"></button>
+        <button class="btn ghost" id="adm-back"><i data-i="back" data-s="18"></i> Back to Catalog</button>
+      </div>
+    </header>
     <nav class="tabs" id="tabs">
       <button class="on" data-t="t-req">Access Requests <b id="ap-n" class="dot" hidden></b></button>
       <button data-t="t-usr">Users Management</button>
@@ -133,31 +169,49 @@
           </label>
           <label>PDF Document (Max 50MB)<input id="u-file" type="file" accept="application/pdf" required></label>
         </div>
-        <button class="btn gold" id="u-btn">Upload Book</button>
+        <button class="btn dark" id="u-btn">Upload Book</button>
       </form>
       <div id="books-list"></div>
     </div>
-  </main>
+  </div>
 </section>
 
-<!-- READER VIEW -->
+<!-- READER -->
 <section id="reader" class="screen">
   <header class="bar glass">
-    <button class="btn ghost" id="r-back">← Library</button>
+    <button class="btn ghost" id="r-back"><i data-i="back" data-s="18"></i> Back</button>
     <div class="r-title"><b id="r-title"></b><span id="pg"></span></div>
-    <div class="bar-r">
-      <button class="btn ghost sm" id="z-out" aria-label="Zoom Out">−</button>
-      <button class="btn ghost sm" id="z-in" aria-label="Zoom In">+</button>
+    <div class="bar-r tools">
+      <button class="icon-btn" id="t-mag" aria-label="Magnifier" title="Magnifier"><i data-i="zoom"></i></button>
+      <div class="hl-wrap">
+        <button class="icon-btn" id="t-hl" aria-label="Highlighter" title="Highlighter"><i data-i="hl"></i></button>
+        <div id="hl-pop">
+          <button data-c="#ffe45c" style="--c:#ffe45c" class="sw-c on" aria-label="Yellow"></button>
+          <button data-c="#7ee8a4" style="--c:#7ee8a4" class="sw-c" aria-label="Green"></button>
+          <button data-c="#ff9ec7" style="--c:#ff9ec7" class="sw-c" aria-label="Pink"></button>
+          <button data-c="#7cc4ff" style="--c:#7cc4ff" class="sw-c" aria-label="Blue"></button>
+          <button id="hl-erase" class="sw-e" title="Eraser">Erase</button>
+        </div>
+      </div>
+      <button class="icon-btn" id="t-bm" aria-label="Bookmark this page" title="Bookmark page"><i data-i="bookmark"></i></button>
+      <button class="icon-btn" id="t-read" aria-label="Reading mode" title="Reading mode"><i data-i="glasses"></i></button>
+      <button class="icon-btn" id="z-out" aria-label="Zoom Out"><i data-i="minus"></i></button>
+      <button class="icon-btn" id="z-in" aria-label="Zoom In"><i data-i="plus"></i></button>
+      <button class="icon-btn" data-act="theme" aria-label="Toggle dark mode"></button>
+      <button class="icon-btn" id="t-side" aria-label="Toggle sidebar"><i data-i="side"></i></button>
       <button class="btn ghost" id="r-save">Save Offline</button>
     </div>
   </header>
   <div class="reader-layout">
     <div id="pages"></div>
     <aside class="notes-sidebar">
-      <h4>Personal Notes & Bookmarks</h4>
+      <h4>Bookmarks</h4>
+      <div id="bm-list"></div>
+      <h4>Personal Notes</h4>
       <textarea id="r-notes" placeholder="Write page notes or key takeaways here..."></textarea>
     </aside>
   </div>
+  <button id="r-exit" class="btn dark">Exit reading mode</button>
   <div id="wm"></div>
 </section>
 
