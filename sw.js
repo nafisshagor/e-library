@@ -1,6 +1,6 @@
 // Service Worker Cache for JCC E-Library
-const CACHE_NAME = 'jcc-elib-v5';
-const LOCAL_ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'jcc-logo.png'];
+const CACHE_NAME = 'jcc-elib-v6';
+const LOCAL_ASSETS = ['./', 'index.html', 'styles.css', 'app.js', 'jcc-logo.png', 'login-1.jpg', 'login-2.jpg', 'login-3.jpg'];
 const CDN_ASSETS = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',

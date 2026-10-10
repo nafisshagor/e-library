@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="theme-color" content="#7f9bab" />
 <title>JCC E-Library · Jhenaidah Cadet College</title>
+<link rel="icon" type="image/png" href="jcc-logo.png" />
+<link rel="apple-touch-icon" href="jcc-logo.png" />
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('jcc:theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(e){}</script>
 <link rel="stylesheet" href="styles.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -21,6 +23,7 @@
 
 <!-- AUTH -->
 <section id="auth" class="screen on">
+  <div id="auth-bg" aria-hidden="true"><i class="on" style="background-image:url(login-1.jpg)"></i><i style="background-image:url(login-2.jpg)"></i><i style="background-image:url(login-3.jpg)"></i></div>
   <button class="icon-btn float-theme" data-act="theme" aria-label="Toggle dark mode"></button>
   <div class="auth-grid">
     <aside class="art">
@@ -29,10 +32,10 @@
         <h1>JHENAIDAH<br>CADET COLLEGE</h1>
         <p class="subtitle">E-Library System & Digital Repository</p>
       </div>
-      <div class="spines" id="spines"></div>
+      <p class="art-foot">Knowledge. Discipline. Excellence.</p>
     </aside>
     <div class="auth-side">
-      <form id="login" class="card glass">
+      <form id="login" class="card glass liquid">
         <h2>Portal Sign In</h2>
         <label>User ID<input id="l-id" required autocomplete="username" placeholder="e.g. cadet_1024"></label>
         <label>Password<input id="l-pw" type="password" required autocomplete="current-password" placeholder="••••••••"></label>
@@ -40,7 +43,7 @@
         <p class="err" id="l-err"></p>
         <p class="sw">New Cadet or Faculty? <a href="#" data-sw="register">Request Account</a></p>
       </form>
-      <form id="register" class="card glass" hidden>
+      <form id="register" class="card glass liquid" hidden>
         <h2>Request Access</h2>
         <label>User ID<input id="r-id" required minlength="3" maxlength="20" placeholder="Letters, numbers, . _ -"></label>
         <label>Full Name<input id="r-name" required placeholder="Cadet Name / Faculty Rank / Name"></label>
@@ -79,7 +82,7 @@
     <header class="top">
       <div class="brand"><svg><use href="#crest"/></svg><span class="serif">JCC E-Library</span></div>
       <div class="navpill">
-        <nav id="nav">
+        <nav id="nav"><i class="ink"></i>
           <button data-f="all" class="on">Library</button>
           <button data-f="recents">Recents</button>
           <button data-f="fav">Favorites</button>
@@ -90,9 +93,20 @@
       <div class="bar-r">
         <span class="net" id="net"><i></i><span>Online</span></span>
         <button class="icon-btn" data-act="theme" aria-label="Toggle dark mode"></button>
-        <div class="chip-user"><span class="av" id="av"></span><div><b id="who"></b><em id="role"></em></div></div>
-        <button class="btn ghost" id="admin-btn" hidden>Admin <b id="adm-n" class="dot" hidden></b></button>
-        <button class="btn ghost" data-act="logout">Sign Out</button>
+        <button class="icon-btn bell" id="bell" hidden aria-label="Pending access requests"><i data-i="bell"></i><b id="adm-n" class="badge" hidden></b></button>
+        <div class="acct-wrap">
+          <button class="acct" id="acct" aria-haspopup="menu" aria-expanded="false">
+            <span class="av" id="av"></span>
+            <span class="acct-t"><b id="who"></b><em id="role"></em></span>
+            <i data-i="chev" data-s="16"></i>
+          </button>
+          <div class="menu" id="menu" role="menu">
+            <button role="menuitem" id="admin-btn" hidden><i data-i="shield" data-s="17"></i><span>Admin Control</span></button>
+            <button role="menuitem" id="prof-btn"><i data-i="user" data-s="17"></i><span>Edit profile</span></button>
+            <button role="menuitem" class="theme-item" data-act="theme-item"><i data-i="moon" data-s="17"></i><span id="theme-lbl">Dark mode</span></button>
+            <button role="menuitem" class="danger" data-act="logout"><i data-i="logout" data-s="17"></i><span>Sign Out</span></button>
+          </div>
+        </div>
       </div>
     </header>
     <div class="hero" id="hero"></div>
@@ -146,11 +160,12 @@
         <button class="btn ghost" id="adm-back"><i data-i="back" data-s="18"></i> Back to Catalog</button>
       </div>
     </header>
-    <nav class="tabs" id="tabs">
+    <nav class="tabs" id="tabs"><i class="ink"></i>
       <button class="on" data-t="t-req">Access Requests <b id="ap-n" class="dot" hidden></b></button>
       <button data-t="t-usr">Users Management</button>
       <button data-t="t-bk">Repository Books</button>
     </nav>
+    <div id="t-wrap">
     <div id="t-req" class="tab on"><div id="pending-list"></div></div>
     <div id="t-usr" class="tab"><div id="users-list"></div></div>
     <div id="t-bk" class="tab">
@@ -172,6 +187,7 @@
         <button class="btn dark" id="u-btn">Upload Book</button>
       </form>
       <div id="books-list"></div>
+    </div>
     </div>
   </div>
 </section>
@@ -212,8 +228,33 @@
     </aside>
   </div>
   <button id="r-exit" class="btn dark">Exit reading mode</button>
-  <div id="wm"></div>
 </section>
+
+<dialog id="prof-dlg" class="dlg">
+  <form id="prof-form">
+    <h3>Edit Profile</h3>
+    <div class="pf-av">
+      <button type="button" id="pf-pick" class="pf-avatar" aria-label="Change photo"><span id="pf-av"></span><i>Change</i></button>
+      <input id="pf-file" type="file" accept="image/*" hidden>
+      <button type="button" class="btn ghost" id="pf-rm">Remove photo</button>
+    </div>
+    <label>Full name<input id="pf-name" required minlength="2" maxlength="60" autocomplete="name"></label>
+    <div class="two">
+      <label>User ID<input id="pf-uid" disabled></label>
+      <label>Role<input id="pf-role" disabled></label>
+    </div>
+    <details class="pf-pw">
+      <summary>Change password</summary>
+      <label>New password<input id="pf-pw" type="password" minlength="6" autocomplete="new-password" placeholder="Leave empty to keep current"></label>
+      <label>Confirm new password<input id="pf-pw2" type="password" autocomplete="new-password"></label>
+    </details>
+    <p class="err" id="pf-err"></p>
+    <div class="act end">
+      <button type="button" class="btn" id="pf-cancel">Cancel</button>
+      <button class="btn dark">Save changes</button>
+    </div>
+  </form>
+</dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>

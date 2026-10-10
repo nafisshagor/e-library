@@ -56,7 +56,12 @@ const IC = {
   landmark: '<path d="M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7M12 2 3 7h18z"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   star: '<polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9"/>',
-  cap: '<path d="M22 10 12 5 2 10l10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>'
+  cap: '<path d="M22 10 12 5 2 10l10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>',
+  bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'
 };
 const GI = { Fiction: 'book', 'Non-fiction': 'glasses', Classics: 'star', Science: 'flask', History: 'landmark', Biography: 'user', Textbook: 'cap' };
 const ico = (n, s = 20) => `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[n] || IC.book}</svg>`;
@@ -68,7 +73,9 @@ function applyTheme(t) {
   document.documentElement.dataset.theme = t;
   try { localStorage.setItem('jcc:theme', t); } catch {}
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'dark' ? '#0b1218' : '#7f9bab');
-  document.querySelectorAll('[data-act="theme"]').forEach((b) => { b.innerHTML = ico(t === 'dark' ? 'sun' : 'moon'); });
+  document.querySelectorAll('.icon-btn[data-act="theme"]').forEach((b) => { b.innerHTML = ico(t === 'dark' ? 'sun' : 'moon'); });
+  const item = document.querySelector('.theme-item');
+  if (item) item.innerHTML = `${ico(t === 'dark' ? 'sun' : 'moon', 17)}<span id="theme-lbl">${t === 'dark' ? 'Light mode' : 'Dark mode'}</span>`;
 }
 function toggleTheme(btn) {
   const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
@@ -82,41 +89,66 @@ function toggleTheme(btn) {
 }
 applyTheme(document.documentElement.dataset.theme || 'light');
 
-/* ---------- Page-change + morph transitions ---------- */
+/* ---------- Motion system: opacity + transform only (compositor-driven, no per-frame layout) ---------- */
+const EASE = 'cubic-bezier(.22,1,.36,1)';
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 let showTok = 0;
-function show(id, { morph = false } = {}) {
+const scrollMem = {};
+
+function show(id, { morph = false, instant = false } = {}) {
   const all = [...document.querySelectorAll('.screen')];
-  const cur0 = all.find((s) => s.classList.contains('on') && !s.classList.contains('out')), next = $('#' + id);
-  if (cur0 === next) return;
+  const from = all.find((s) => s.classList.contains('on') && !s.classList.contains('out')), next = $('#' + id);
+  if (from === next) return;
   const t = ++showTok;
+  if (from) scrollMem[from.id] = scrollY;
   const clean = () => all.forEach((s) => { if (s !== next) { s.classList.remove('on', 'out', 'ghost'); s.style.top = ''; } });
-  const enter = () => { next.classList.remove('out', 'ghost', 'fade'); if (morph) next.classList.add('fade'); next.classList.add('on'); scrollTo(0, 0); };
-  if (!cur0) { clean(); enter(); return; }
-  cur0.classList.add('out');
-  if (morph) {
-    cur0.style.top = -scrollY + 'px'; cur0.classList.add('ghost');
-    enter();
-    setTimeout(() => { if (t === showTok) clean(); }, 520);
-  } else setTimeout(() => { if (t === showTok) { clean(); enter(); } }, 270);
+  const enter = () => {
+    next.classList.remove('out', 'ghost', 'fade', 'inst');
+    next.classList.add(morph ? 'fade' : instant ? 'inst' : 'rise', 'on');
+    scrollTo(0, id === 'library' ? (scrollMem.library || 0) : 0);
+    requestAnimationFrame(syncInks);
+  };
+  if (!from || instant) { clean(); enter(); return; }
+  from.style.top = -scrollY + 'px';           // freeze position, then cross-fade it out on top
+  from.classList.add('out', 'ghost');
+  enter();
+  setTimeout(() => { if (t === showTok) clean(); }, 320);
 }
 
 const rectOf = (el) => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
-/* Morph (FLIP) a cover from one element to another */
-function flyCover(src, dst, ms = 750) {
+
+/* FLIP cover flight: the clone is rasterised once at the larger size and only transformed */
+function flyCover(src, dst, ms = 640, srcRect) {
   if (!src || !dst || reduced) return Promise.resolve();
-  const a = rectOf(src), b = rectOf(dst);
+  const a = srcRect || rectOf(src), b = rectOf(dst);
+  if (!a.width || !b.width) return Promise.resolve();
+  const big = a.width >= b.width ? a : b;
   const c = src.cloneNode(true);
   c.classList.add('morph');
-  const px = (r) => ({ left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
-  Object.assign(c.style, px(a));
+  Object.assign(c.style, { left: big.left + 'px', top: big.top + 'px', width: big.width + 'px', height: big.height + 'px' });
+  const tf = (r) => `translate3d(${r.left - big.left}px, ${r.top - big.top}px, 0) scale(${r.width / big.width}, ${r.height / big.height})`;
   document.body.append(c);
-  const dstPrev = dst.style.visibility;
+  const prev = dst.style.visibility;
   dst.style.visibility = 'hidden';
-  const done = () => { dst.style.visibility = dstPrev; c.remove(); };
+  const done = () => { dst.style.visibility = prev; c.remove(); };
   try {
-    return c.animate([px(a), px(b)], { duration: ms, easing: 'cubic-bezier(.65,.05,.25,1)', fill: 'forwards' }).finished.then(done, done);
+    return c.animate([{ transform: tf(a) }, { transform: tf(b) }], { duration: ms, easing: EASE, fill: 'both' }).finished.then(done, done);
   } catch { done(); return Promise.resolve(); }
 }
+
+/* Sliding indicator for pill navs */
+function slideInk(nav) {
+  const ink = nav && nav.querySelector('.ink'), on = nav && nav.querySelector('button.on');
+  if (!ink || !on || !on.offsetWidth) return;
+  const first = !ink.style.width;
+  if (first) ink.style.transition = 'none';
+  ink.style.width = on.offsetWidth + 'px';
+  ink.style.transform = `translate3d(${on.offsetLeft}px,0,0)`;
+  if (first) { void ink.offsetWidth; ink.style.transition = ''; }
+}
+function syncInks() { slideInk($('#nav')); slideInk($('#tabs')); }
+addEventListener('resize', debounce(syncInks, 120));
 
 /* ---------- Storage ---------- */
 const idb = new Promise((res, rej) => {
@@ -172,8 +204,9 @@ if ($('#spines')) {
 /* DRM Guards */
 document.addEventListener('contextmenu', (e) => { if ($('#reader').classList.contains('on')) e.preventDefault(); });
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && ['s', 'p', 'u', 'c', 'a', 'i', 'j'].includes(e.key.toLowerCase())) e.preventDefault();
-  if (e.key === 'F12') e.preventDefault();
+  const inReader = $('#reader').classList.contains('on') && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+  if (inReader && (e.ctrlKey || e.metaKey) && ['s', 'p', 'u', 'c', 'a'].includes(e.key.toLowerCase())) e.preventDefault();
+  if (inReader && e.key === 'F12') e.preventDefault();
   if (e.key === 'Escape' && $('#reader').classList.contains('reading')) toggleReading(false);
 });
 
@@ -208,7 +241,7 @@ $('#register').onsubmit = async (e) => {
 document.addEventListener('click', async (e) => {
   const a = e.target.closest('[data-act]');
   if (!a) return;
-  if (a.dataset.act === 'theme') return toggleTheme(a);
+  if (a.dataset.act === 'theme' || a.dataset.act === 'theme-item') return toggleTheme(a);
   if (a.dataset.act !== 'logout') return;
   channels.forEach((c) => sb.removeChannel(c));
   await kv.del('profile');
@@ -253,10 +286,9 @@ async function boot() {
 /* ---------- Catalog ---------- */
 async function enter() {
   favs = new Set(jget(`fav:${me.id}`, []));
-  $('#who').textContent = me.full_name;
-  $('#av').textContent = (me.full_name || '?').trim().charAt(0).toUpperCase();
-  $('#role').textContent = ROLES[me.role] || me.role;
+  paintMe();
   $('#admin-btn').hidden = me.role !== 'admin';
+  $('#bell').hidden = me.role !== 'admin';
   await loadBooks();
   render();
   updateStats();
@@ -296,7 +328,8 @@ function renderHero() {
   $('#hero').innerHTML = card(b1, '', 'Latest addition') + card(b2, 'b', 'Recommended for you');
 }
 
-function render() {
+let chipSig = '';
+function render(opts = {}) {
   const off = !navigator.onLine;
   $('#net').classList.toggle('off', off);
   $('#net span').textContent = off ? 'Offline' : 'Online';
@@ -304,8 +337,14 @@ function render() {
 
   const genres = [...new Set(books.map((b) => b.genre))];
   const cats = [['all', 'All Books', 'book'], ['recents', 'Recents', 'clock'], ['saved', 'Saved Offline', 'download'], ['fav', 'Favorites', 'heart'], ...genres.map((g) => [g, g, GI[g] || 'book'])];
-  $('#chips').innerHTML = cats.map(([k, l, i]) => `<button data-f="${esc(k)}" class="${filter === k ? 'on' : ''}">${ico(i, 20)}<span>${esc(l)}</span></button>`).join('');
+  const sig = cats.map((c) => c.join()).join('|');
+  if (sig !== chipSig) {            // only rebuild chips when the category set changes, so the active-state morph can animate
+    chipSig = sig;
+    $('#chips').innerHTML = cats.map(([k, l, i]) => `<button data-f="${esc(k)}">${ico(i, 20)}<span>${esc(l)}</span></button>`).join('');
+  }
+  $('#chips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.f === filter));
   document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.f === filter));
+  requestAnimationFrame(() => slideInk($('#nav')));
   const label = (cats.find((c) => c[0] === filter) || [])[1] || 'All Books';
   $('#sec-title').textContent = filter === 'all' ? 'Library Catalog' : genres.includes(filter) ? `Trending in ${label}` : label;
 
@@ -319,6 +358,7 @@ function render() {
     else list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }
 
+  $('#grid').classList.toggle('noanim', !!opts.quiet);
   $('#grid').innerHTML = list.length ? list.map((b, i) => {
     const lastPg = localStorage.getItem(`pg:${me.id}:${b.id}`);
     const yr = b.created_at ? new Date(b.created_at).getFullYear() : '';
@@ -343,7 +383,7 @@ const setFilter = (f) => { filter = f; render(); };
 $('#chips').onclick = (e) => { const b = e.target.closest('[data-f]'); if (b) setFilter(b.dataset.f); };
 $('#nav').onclick = (e) => { const b = e.target.closest('[data-f]'); if (b) setFilter(b.dataset.f); };
 $('#sort').onchange = (e) => { sortMode = e.target.value; render(); };
-$('#search').oninput = (e) => { q = e.target.value.trim().toLowerCase(); render(); };
+$('#search').oninput = debounce((e) => { q = e.target.value.trim().toLowerCase(); render({ quiet: true }); }, 140);
 $('#s-btn').onclick = () => { $('.sbox').classList.toggle('open'); $('#search').focus(); };
 
 function toggleFav(id) {
@@ -394,55 +434,55 @@ function fillDetail(b) {
 function openDetail(b, srcEl) {
   if (!b) return;
   fillDetail(b);
+  const a = srcEl ? rectOf(srcEl) : null;
+  show('detail', { morph: !!srcEl });
   const dst = $('#d-cover .cv');
-  const src = srcEl;
-  const was = src ? src.cloneNode(true) : null;
-  const a = src ? rectOf(src) : null;
-  show('detail', { morph: !!src });
-  if (src && dst && was) {
-    // fly the clone from the original rect (src is still laid out under the ghosting screen)
-    const hold = { getBoundingClientRect: () => ({ left: a.left, top: a.top, width: a.width, height: a.height }), cloneNode: () => was.cloneNode(true) };
-    flyCover(hold, dst);
-  }
+  if (srcEl && dst && a) flyCover(srcEl, dst, 640, a);
 }
 function closeDetail() {
   const id = detailBook?.id, src = $('#d-cover .cv');
   show('library', { morph: true });
-  const dst = id && document.querySelector(`.book[data-id="${id}"] .cv`);
-  if (dst && src) flyCover(src, dst, 650);
-  else if (id) { const h = document.querySelector(`.hero-card[data-id="${id}"] .cv`); if (h && src) flyCover(src, h, 650); }
+  const dst = id && (document.querySelector(`.book[data-id="${id}"] .cv`) || document.querySelector(`.hero-card[data-id="${id}"] .cv`));
+  if (dst && src) flyCover(src, dst, 600);
 }
 $('#d-back').onclick = closeDetail;
 $('#d-fav').onclick = () => detailBook && toggleFav(detailBook.id);
 $('#d-save').onclick = async () => { if (detailBook) { await toggleOffline(detailBook); updDetail(); render(); } };
 $('#d-read').onclick = () => detailBook && readFlow(detailBook);
 
-/* Book-opening morph: cover lifts, opens in 3D, page expands into the reader */
+/* Book-opening flow: cover lifts to centre, opens in 3D, the page grows into the reader.
+   Every step is a transform/opacity animation, and the heavy reader build waits until it is over. */
 async function readFlow(b) {
   if (!navigator.onLine && !saved.has(b.id)) return toast('Connect online once to view this book.', 'err');
   const cov = $('#d-cover .cv');
-  if (reduced || !cov) return openBook(b, true);
-  const r = rectOf(cov), vh = innerHeight, H = Math.min(vh * .66, 520), W = H * (r.width / r.height);
+  if (reduced || !cov) return openBook(b);
+  const r = rectOf(cov), vw = innerWidth, vh = innerHeight;
+  const H = Math.min(vh * .6, 460), W = H * (r.width / r.height), L = (vw - W) / 2, T = (vh - H) / 2;
   const ov = document.createElement('div');
   ov.className = 'bk-ov';
   ov.innerHTML = '<div class="bk-book"><div class="bk-page"></div><div class="bk-cover"><div class="bk-front"></div><div class="bk-back"></div></div></div>';
   const book = ov.firstChild, cover = ov.querySelector('.bk-cover');
   ov.querySelector('.bk-front').append(cov.cloneNode(true));
-  const px = (l, t, w, h) => ({ left: l + 'px', top: t + 'px', width: w + 'px', height: h + 'px' });
-  Object.assign(book.style, px(r.left, r.top, r.width, r.height));
+  Object.assign(book.style, { left: L + 'px', top: T + 'px', width: W + 'px', height: H + 'px' });
+  const start = `translate3d(${r.left - L}px, ${r.top - T}px, 0) scale(${r.width / W}, ${r.height / H})`;
+  book.style.transform = start;
   document.body.append(ov);
   cov.style.visibility = 'hidden';
-  const E = 'cubic-bezier(.65,.05,.25,1)', fw = (d, easing = E) => ({ duration: d, easing, fill: 'forwards' });
+  let release; const ready = new Promise((res) => { release = res; });
+  const o = (d, easing = EASE) => ({ duration: d, easing, fill: 'forwards' });
+  const swing = 'cubic-bezier(.45,.05,.2,1)';
+  openBook(b, ready);                         // download + parse overlap with the animation
   try {
-    ov.animate({ opacity: [0, 1] }, fw(300, 'ease'));
-    await book.animate([px(r.left, r.top, r.width, r.height), px((innerWidth - W) / 2, (vh - H) / 2, W, H)], fw(420)).finished;
-    cover.animate({ transform: ['rotateY(0deg)', 'rotateY(-172deg)'] }, fw(700));
-    await book.animate([px((innerWidth - W) / 2, (vh - H) / 2, W, H), px(innerWidth / 2, (vh - H) / 2, W, H)], fw(700)).finished;
-    cover.animate({ opacity: [1, 0] }, fw(200, 'ease'));
-    openBook(b, true);
-    await book.animate([px(innerWidth / 2, (vh - H) / 2, W, H), px(0, 0, innerWidth, vh)], fw(480)).finished;
-    await ov.animate({ opacity: [1, 0] }, fw(380, 'ease')).finished;
-  } catch (e) { console.warn(e); }
+    ov.animate({ opacity: [0, 1] }, o(240, 'ease-out'));
+    await book.animate([{ transform: start }, { transform: 'translate3d(0,0,0) scale(1,1)' }], o(460)).finished;
+    cover.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(-172deg)' }], o(620, swing));
+    await book.animate([{ transform: 'translate3d(0,0,0)' }, { transform: `translate3d(${W / 2}px,0,0)` }], o(620, swing)).finished;
+    cover.animate({ opacity: [1, 0] }, o(140, 'ease'));
+    await book.animate([{ transform: `translate3d(${W / 2}px,0,0) scale(1,1)` }, { transform: `translate3d(${-L}px, ${-T}px, 0) scale(${vw / W}, ${vh / H})` }], o(440, 'cubic-bezier(.65,0,.25,1)')).finished;
+    release();                                // page covers the viewport: reader is swapped in underneath
+    await nextFrame();
+    await ov.animate({ opacity: [1, 0] }, o(340, 'ease')).finished;
+  } catch (e) { console.warn(e); release(); }
   ov.remove();
   cov.style.visibility = '';
 }
@@ -489,19 +529,20 @@ async function openPdf(buf) {
 const setLoadMsg = (m) => { const el = $('#ld-msg'); if (el) el.textContent = m; };
 
 /* ---------- Reader ---------- */
-async function openBook(b, morph = false) {
+async function openBook(b, ready) {
   if (!navigator.onLine && !saved.has(b.id)) return toast('Connect online once to view this book.', 'err');
   const token = ++openToken;
   if (pdf) { pdf.destroy(); pdf = null; }
   cur = b; zoom = 1; curPage = 1;
   bms = jget(bmKey(), []); hlData = jget(hlKey(), {});
-  show('reader', { morph });
+  if (!ready) show('reader');
   $('#reader').classList.toggle('reading', localStorage.getItem('jcc:rm') === '1');
   $('#r-title').textContent = b.title;
   $('#pg').textContent = 'Loading document...';
   $('#pages').innerHTML = '<div class="load-spinner"><div class="spin"></div><p id="ld-msg">Opening Document…</p></div>';
-  updSave(); updBm(); watermark(); loadNotes();
+  updSave(); updBm(); loadNotes();
   markRecentlyRead(b.id).catch(() => {});
+  const reveal = async () => { if (ready) { await ready; if (token === openToken) show('reader', { instant: true }); } };
   try {
     setLoadMsg('Downloading document…');
     const buf = await fetchPdfData(b);
@@ -510,10 +551,14 @@ async function openBook(b, morph = false) {
     const doc = await openPdf(buf);
     if (token !== openToken) { doc.destroy(); return; }
     pdf = doc;
+    await reveal();
+    if (token !== openToken) return;
+    await nextFrame();
     await build();
   } catch (x) {
     if (token !== openToken) return;
     console.error('PDF Open Error:', x);
+    await reveal();
     $('#pg').textContent = 'Failed to load';
     $('#pages').innerHTML = `<div class="load-spinner fail"><p>This document could not be opened.</p><small>${esc(x.message || x)}</small><button class="btn dark" id="r-retry">Try Again</button></div>`;
     $('#r-retry').onclick = () => openBook(b);
@@ -549,7 +594,8 @@ async function renderPage(el) {
     const box = $('#pages');
     const scale = (pageBaseWidth(box) * zoom) / (viewport0.width || 600);
     const vp = pg.getViewport({ scale });
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.max(.5, Math.min(dpr, Math.sqrt(6e6 / (vp.width * vp.height))));   // stay inside mobile canvas limits when zoomed
     const renderVp = pg.getViewport({ scale: scale * dpr });
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(renderVp.width);
@@ -572,7 +618,16 @@ async function renderPage(el) {
   } finally { delete el.dataset.rendering; }
 }
 
+/* free canvas memory for pages far from the viewport (keeps phones fast) */
+function releasePage(el) {
+  if (!el.dataset.rendered) return;
+  el.replaceChildren();
+  delete el.dataset.rendered;
+}
+
+let shownPg = 0;
 async function build() {
+  shownPg = 0;
   if (!pdf) return;
   const box = $('#pages');
   box.innerHTML = '';
@@ -583,8 +638,8 @@ async function build() {
   const targetHeight = (viewport0.height || 800) * scale;
   if (pageObserver) pageObserver.disconnect();
   const io = pageObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => { if (entry.isIntersecting) renderPage(entry.target); });
-  }, { root: box, rootMargin: '800px 0px' });
+    entries.forEach((entry) => entry.isIntersecting ? renderPage(entry.target) : releasePage(entry.target));
+  }, { root: box, rootMargin: '1200px 0px' });
   for (let n = 1; n <= pdf.numPages; n++) {
     const d = document.createElement('div');
     d.className = 'pg'; d.dataset.n = n;
@@ -601,16 +656,19 @@ async function build() {
 
 function track() {
   if (!pdf) return;
-  const box = $('#pages'), mid = box.scrollTop + box.clientHeight / 3;
-  let n = 1;
-  for (const c of box.children) { if (c.offsetTop + c.offsetHeight > mid) { n = +c.dataset.n || 1; break; } }
-  curPage = n;
+  const box = $('#pages'), kids = box.children, mid = box.scrollTop + box.clientHeight / 3;
+  let lo = 0, hi = kids.length - 1;               // binary search instead of walking every page
+  while (lo < hi) { const m = (lo + hi) >> 1; if (kids[m].offsetTop + kids[m].offsetHeight > mid) hi = m; else lo = m + 1; }
+  const n = +(kids[lo] && kids[lo].dataset.n) || 1;
+  if (n === shownPg) return;
+  shownPg = curPage = n;
   $('#pg').textContent = `Page ${n} of ${pdf.numPages} (${Math.round((n / pdf.numPages) * 100)}%)`;
-  localStorage.setItem(`pg:${me.id}:${cur.id}`, n);
+  try { localStorage.setItem(`pg:${me.id}:${cur.id}`, n); } catch {}
   updBm(true);
 }
 
-$('#pages').onscroll = () => pdf && track();
+let trackQ = false;
+$('#pages').onscroll = () => { if (!pdf || trackQ) return; trackQ = true; requestAnimationFrame(() => { trackQ = false; track(); }); };
 $('#z-in').onclick = () => { if (pdf && zoom < 2.2) { zoom += 0.2; build(); } };
 $('#z-out').onclick = () => { if (pdf && zoom > 0.6) { zoom -= 0.2; build(); } };
 
@@ -752,24 +810,34 @@ $('#r-exit').onclick = () => toggleReading(false);
 $('#t-side').onclick = () => { setTool('noside', !$('#reader').classList.contains('noside')); if (pdf) setTimeout(build, 520); };
 addEventListener('mousemove', (e) => { const r = $('#reader'); if (r.classList.contains('reading')) r.classList.toggle('peek', e.clientY < 70); });
 
-/* ---------- Notes & Watermark ---------- */
+/* ---------- Notes ---------- */
 function loadNotes() { $('#r-notes').value = localStorage.getItem(`note:${me.id}:${cur.id}`) || ''; }
 $('#r-notes').oninput = (e) => localStorage.setItem(`note:${me.id}:${cur.id}`, e.target.value);
 
-function watermark() {
-  const t = esc(`${me.full_name} (${me.user_id}) · JCC E-Library`);
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='400' height='240'><text x='30' y='160' transform='rotate(-22 30 160)' font-family='sans-serif' font-weight='bold' font-size='14' fill='rgba(120,120,120,0.16)'>${t}</text></svg>`;
-  $('#wm').style.backgroundImage = `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-}
 
 /* ---------- Admin ---------- */
 $('#admin-btn').onclick = () => { show('admin'); loadAdmin(); };
 $('#adm-back').onclick = () => show('library');
+function selectTab(id) {
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.t === id));
+  document.querySelectorAll('.tab').forEach((p) => p.classList.toggle('on', p.id === id));
+  slideInk($('#tabs'));
+}
 $('#tabs').onclick = (e) => {
-  const t = e.target.dataset.t; if (!t) return;
-  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b === e.target));
-  document.querySelectorAll('.tab').forEach((p) => p.classList.toggle('on', p.id === t));
+  const btn = e.target.closest('button[data-t]');
+  if (!btn || btn.classList.contains('on')) return;
+  const id = btn.dataset.t, wrap = $('#t-wrap'), root = document.documentElement;
+  if (document.startViewTransition && !reduced && !root.classList.contains('vt-tab')) {
+    root.classList.add('vt-tab');
+    wrap.style.viewTransitionName = 'tabpanel';        // the panel container morphs size + cross-fades
+    const vt = document.startViewTransition(() => selectTab(id));
+    vt.finished.finally(() => { root.classList.remove('vt-tab'); wrap.style.viewTransitionName = ''; });
+  } else {
+    selectTab(id);
+    const p = $('#' + id); p.classList.add('flip'); setTimeout(() => p.classList.remove('flip'), 520);
+  }
 };
+$('#bell').onclick = () => { show('admin'); loadAdmin(); selectTab('t-req'); };
 
 function watchSignups() {
   const sub = sb.channel('signups-realtime')
@@ -892,5 +960,91 @@ $('#up').onsubmit = async (e) => {
   btn.disabled = false;
   btn.textContent = 'Upload Book';
 };
+
+
+/* ---------- Profile (name, photo, password) ---------- */
+function paintAv(el, name, img) {
+  if (img && img.startsWith('data:image/')) { el.style.backgroundImage = `url('${img}')`; el.textContent = ''; }
+  else { el.style.backgroundImage = ''; el.textContent = (name || '?').trim().charAt(0).toUpperCase(); }
+}
+function paintMe() {
+  $('#who').textContent = me.full_name;
+  $('#role').textContent = ROLES[me.role] || me.role;
+  paintAv($('#av'), me.full_name, me.avatar);
+}
+let pfAvatar = null;
+$('#prof-btn').onclick = () => {
+  pfAvatar = me.avatar || null;
+  $('#pf-name').value = me.full_name; $('#pf-uid').value = me.user_id; $('#pf-role').value = ROLES[me.role] || me.role;
+  $('#pf-pw').value = ''; $('#pf-pw2').value = ''; $('#pf-err').textContent = '';
+  document.querySelector('.pf-pw').open = false;
+  paintAv($('#pf-av'), me.full_name, pfAvatar);
+  $('#prof-dlg').showModal();
+};
+$('#pf-cancel').onclick = () => $('#prof-dlg').close();
+$('#prof-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+$('#pf-pick').onclick = () => $('#pf-file').click();
+$('#pf-rm').onclick = () => { pfAvatar = null; paintAv($('#pf-av'), $('#pf-name').value, null); };
+$('#pf-name').oninput = (e) => { if (!pfAvatar) paintAv($('#pf-av'), e.target.value, null); };
+$('#pf-file').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const bmp = await createImageBitmap(f), S = 192, m = Math.min(bmp.width, bmp.height);
+    const c = document.createElement('canvas'); c.width = c.height = S;
+    c.getContext('2d').drawImage(bmp, (bmp.width - m) / 2, (bmp.height - m) / 2, m, m, 0, 0, S, S);
+    pfAvatar = c.toDataURL('image/jpeg', .82);          // ~8 KB, stored with the profile
+    paintAv($('#pf-av'), '', pfAvatar);
+  } catch { toast('Could not read that image.', 'err'); }
+};
+$('#prof-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const name = $('#pf-name').value.trim(), pw = $('#pf-pw').value, btn = e.submitter || e.target.querySelector('.btn.dark');
+  if (name.length < 2) return err('#pf-err', 'Please enter your full name.');
+  if (pw && pw.length < 6) return err('#pf-err', 'Password must be at least 6 characters.');
+  if (pw && pw !== $('#pf-pw2').value) return err('#pf-err', 'Passwords do not match.');
+  btn.disabled = true; err('#pf-err', '');
+  try {
+    const { error } = await sb.rpc('update_my_profile', { p_name: name, p_avatar: pfAvatar });
+    if (error) return err('#pf-err', /update_my_profile|schema cache/i.test(error.message) ? 'Profile editing needs the updated schema.sql in Supabase.' : error.message);
+    if (pw) {
+      const r = await sb.auth.updateUser({ password: pw });
+      if (r.error) return err('#pf-err', 'Profile saved, but password was not changed: ' + r.error.message);
+    }
+    me = { ...me, full_name: name, avatar: pfAvatar };
+    kv.set('profile', me).catch(() => {});
+    paintMe();
+    $('#prof-dlg').close();
+    toast(pw ? 'Profile and password updated.' : 'Profile updated.');
+  } finally { btn.disabled = false; }
+};
+
+/* ---------- Account menu ---------- */
+const menu = $('#menu'), acct = $('#acct');
+const setMenu = (on) => { menu.classList.toggle('open', on); acct.setAttribute('aria-expanded', on); };
+acct.onclick = (e) => { e.stopPropagation(); setMenu(!menu.classList.contains('open')); };
+menu.onclick = (e) => { if (e.target.closest('[role="menuitem"]')) setMenu(false); };
+document.addEventListener('click', (e) => { if (!e.target.closest('.acct-wrap')) setMenu(false); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
+
+/* ---------- Login page: slow photo cross-fade (pre-blurred images, no runtime blur) ---------- */
+(() => {
+  const layers = [...document.querySelectorAll('#auth-bg i')]; let k = 0;
+  setInterval(() => {
+    if (document.hidden || !$('#auth').classList.contains('on')) return;
+    layers[k].classList.remove('on'); k = (k + 1) % layers.length; layers[k].classList.add('on');
+  }, 9000);
+})();
+/* liquid-glass highlight follows the pointer (one rAF-throttled CSS variable) */
+document.querySelectorAll('.liquid').forEach((c) => {
+  let raf = 0;
+  c.addEventListener('pointermove', (e) => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0; const r = c.getBoundingClientRect();
+      c.style.setProperty('--mx', (e.clientX - r.left) + 'px'); c.style.setProperty('--my', (e.clientY - r.top) + 'px');
+    });
+  });
+});
 
 boot();
