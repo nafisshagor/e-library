@@ -11,7 +11,8 @@
 <link rel="stylesheet" href="styles.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+<noscript><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" /></noscript>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute">
@@ -19,6 +20,13 @@
 </svg>
 <div id="bg"><i></i><i></i><i></i></div>
 <div id="toasts"></div>
+<div id="light"></div>
+<nav id="tabbar" aria-label="Library sections"><i class="ink"></i>
+  <button data-f="all" class="on"><i data-i="book" data-s="22"></i><span>Library</span></button>
+  <button data-f="recents"><i data-i="clock" data-s="22"></i><span>Recents</span></button>
+  <button data-f="fav"><i data-i="heart" data-s="22"></i><span>Favorites</span></button>
+  <button data-f="saved"><i data-i="download" data-s="22"></i><span>Offline</span></button>
+</nav>
 <div id="lens"><canvas width="380" height="380"></canvas></div>
 
 <!-- AUTH -->
@@ -37,7 +45,7 @@
     <div class="auth-side">
       <form id="login" class="card glass liquid">
         <h2>Portal Sign In</h2>
-        <label>User ID<input id="l-id" required autocomplete="username" placeholder="e.g. cadet_1024"></label>
+        <label>User ID<span class="idbox"><b>JCC-</b><input id="l-id" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text" maxlength="20" placeholder="Cadet number"></span></label>
         <label>Password<input id="l-pw" type="password" required autocomplete="current-password" placeholder="••••••••"></label>
         <button class="btn dark">Sign In</button>
         <p class="err" id="l-err"></p>
@@ -45,7 +53,7 @@
       </form>
       <form id="register" class="card glass liquid" hidden>
         <h2>Request Access</h2>
-        <label>User ID<input id="r-id" required minlength="3" maxlength="20" placeholder="Letters, numbers, . _ -"></label>
+        <label>User ID<span class="idbox"><b>JCC-</b><input id="r-id" required maxlength="20" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text" placeholder="Cadet number"></span></label>
         <label>Full Name<input id="r-name" required placeholder="Cadet Name / Faculty Rank / Name"></label>
         <label>Role
           <select id="r-role">
@@ -103,7 +111,6 @@
           <div class="menu" id="menu" role="menu">
             <button role="menuitem" id="admin-btn" hidden><i data-i="shield" data-s="17"></i><span>Admin Control</span></button>
             <button role="menuitem" id="prof-btn"><i data-i="user" data-s="17"></i><span>Edit profile</span></button>
-            <button role="menuitem" class="theme-item" data-act="theme-item"><i data-i="moon" data-s="17"></i><span id="theme-lbl">Dark mode</span></button>
             <button role="menuitem" class="danger" data-act="logout"><i data-i="logout" data-s="17"></i><span>Sign Out</span></button>
           </div>
         </div>
@@ -112,7 +119,7 @@
     <div class="hero" id="hero"></div>
     <div id="chips" class="chips"></div>
     <div class="sec-head">
-      <div><h2 id="sec-title">Library Catalog</h2><p id="sec-sub"><b id="st-total">0</b> books · <b id="st-saved">0</b> saved offline</p></div>
+      <div><h2 id="sec-title">Library Catalog</h2><p id="sec-sub"><b id="st-total">0</b> books · <b id="st-saved">0</b> saved offline<span id="q-flag" hidden> · showing “<i id="q-txt"></i>” <a href="#" id="q-clear">clear</a></span></p></div>
       <label class="sortpill"><i data-i="filter" data-s="16"></i>
         <select id="sort">
           <option value="recent">Recently Added</option>
@@ -167,7 +174,15 @@
     </nav>
     <div id="t-wrap">
     <div id="t-req" class="tab on"><div id="pending-list"></div></div>
-    <div id="t-usr" class="tab"><div id="users-list"></div></div>
+    <div id="t-usr" class="tab">
+      <nav class="tabs" id="usr-seg"><i class="ink"></i>
+        <button class="on" data-g="all">All <b></b></button>
+        <button data-g="cadet">Cadets <b></b></button>
+        <button data-g="faculty">Faculty <b></b></button>
+        <button data-g="admin">Admins <b></b></button>
+      </nav>
+      <div id="users-list"></div>
+    </div>
     <div id="t-bk" class="tab">
       <form id="up" class="card flat glass">
         <h3>Publish PDF Book</h3>
@@ -184,6 +199,7 @@
           </label>
           <label>PDF Document (Max 50MB)<input id="u-file" type="file" accept="application/pdf" required></label>
         </div>
+        <label>Thumbnail (optional: JPG/PNG, otherwise page 1 is used)<input id="u-cover" type="file" accept="image/*"></label>
         <button class="btn dark" id="u-btn">Upload Book</button>
       </form>
       <div id="books-list"></div>
@@ -214,6 +230,7 @@
       <button class="icon-btn" id="z-out" aria-label="Zoom Out"><i data-i="minus"></i></button>
       <button class="icon-btn" id="z-in" aria-label="Zoom In"><i data-i="plus"></i></button>
       <button class="icon-btn" data-act="theme" aria-label="Toggle dark mode"></button>
+      <button class="icon-btn" id="t-full" aria-label="Full screen" title="Full screen (F)"><i data-i="expand"></i></button>
       <button class="icon-btn" id="t-side" aria-label="Toggle sidebar"><i data-i="side"></i></button>
       <button class="btn ghost" id="r-save">Save Offline</button>
     </div>
@@ -233,11 +250,6 @@
 <dialog id="prof-dlg" class="dlg">
   <form id="prof-form">
     <h3>Edit Profile</h3>
-    <div class="pf-av">
-      <button type="button" id="pf-pick" class="pf-avatar" aria-label="Change photo"><span id="pf-av"></span><i>Change</i></button>
-      <input id="pf-file" type="file" accept="image/*" hidden>
-      <button type="button" class="btn ghost" id="pf-rm">Remove photo</button>
-    </div>
     <label>Full name<input id="pf-name" required minlength="2" maxlength="60" autocomplete="name"></label>
     <div class="two">
       <label>User ID<input id="pf-uid" disabled></label>
@@ -255,6 +267,21 @@
     </div>
   </form>
 </dialog>
+
+<dialog id="ue-dlg" class="dlg">
+  <form id="ue-form">
+    <h3>Edit User</h3>
+    <label>Full name<input id="ue-name" required minlength="2" maxlength="60"></label>
+    <label>User ID (used to sign in)<input id="ue-uid" required minlength="3" maxlength="20" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
+    <p class="hint">Format: JCC-1024 (letters, numbers, . _ - only). If you change the User ID, tell the user their new sign-in ID.</p>
+    <p class="err" id="ue-err"></p>
+    <div class="act end">
+      <button type="button" class="btn" id="ue-cancel">Cancel</button>
+      <button class="btn dark">Save changes</button>
+    </div>
+  </form>
+</dialog>
+<input id="cover-pick" type="file" accept="image/*" hidden>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>

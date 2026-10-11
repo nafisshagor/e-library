@@ -9,7 +9,7 @@
   --shadow: 0 24px 60px -24px rgba(10,30,45,.45);
   --r: 28px; --r2: 20px; --r3: 14px;
   --ease: cubic-bezier(.22,1,.36,1);
-  --sh-card: 1px 2px 2px rgba(20,28,36,.2), 6px 10px 14px -6px rgba(20,28,36,.34), 18px 28px 34px -18px rgba(20,28,36,.55);
+  --sh-card: 1px 2px 2px rgba(20,28,36,.18), 9px 14px 18px -8px rgba(20,28,36,.42);
   --sh-lift: 2px 4px 4px rgba(20,28,36,.22), 12px 20px 26px -8px rgba(20,28,36,.38), 30px 46px 54px -22px rgba(20,28,36,.6);
   --band: rgba(18,28,38,.075); --band2: rgba(18,28,38,.12);
 }
@@ -21,7 +21,7 @@
   --ink: #04080b; --on-ink: #fff;
   --field: rgba(255,255,255,.08);
   --shadow: 0 24px 60px -24px rgba(0,0,0,.8);
-  --sh-card: 1px 2px 2px rgba(0,0,0,.5), 6px 10px 14px -6px rgba(0,0,0,.6), 18px 28px 34px -18px rgba(0,0,0,.8);
+  --sh-card: 1px 2px 2px rgba(0,0,0,.5), 9px 14px 18px -8px rgba(0,0,0,.7);
   --sh-lift: 2px 4px 4px rgba(0,0,0,.55), 12px 20px 26px -8px rgba(0,0,0,.65), 30px 46px 54px -22px rgba(0,0,0,.85);
   --band: rgba(0,0,0,.14); --band2: rgba(0,0,0,.22);
 }
@@ -70,13 +70,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .shell { position: relative; width: min(1260px, calc(100% - 2rem)); margin: 1rem auto; border-radius: 36px; padding: 1.4rem 1.6rem 2rem; min-height: calc(100vh - 2rem); }
 .shell.narrow { width: min(960px, calc(100% - 2rem)); }
 /* window-light shadows falling across the glass, like the sun through blinds */
-.shell::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 3;
+#light { position: fixed; inset: 0; z-index: 2; pointer-events: none;
   background:
     linear-gradient(112deg, transparent 0 20%, var(--band) 28%, var(--band2) 34%, transparent 46%),
     linear-gradient(112deg, transparent 54%, var(--band) 61%, var(--band2) 65%, transparent 75%),
-    radial-gradient(60% 36% at 90% 6%, rgba(255,255,255,.2), transparent 70%);
-}
+    radial-gradient(60% 36% at 90% 6%, rgba(255,255,255,.18), transparent 70%); }
+body[data-screen="reader"] #light, body[data-screen="auth"] #light { display: none; }
 
 /* Buttons & inputs */
 .btn {
@@ -376,11 +375,12 @@ input:focus, select:focus, textarea:focus { outline: 0; border-color: var(--gold
 
 /* Reading mode */
 #r-exit { position: fixed; right: 1.4rem; bottom: 1.4rem; z-index: 30; opacity: 0; pointer-events: none; transform: translateY(20px); transition: .4s var(--ease); }
-#reader.reading #r-exit { opacity: .85; pointer-events: auto; transform: none; }
-#reader.reading .bar { position: absolute; left: 0; right: 0; top: 0; transform: translateY(-140%); opacity: 0; }
-#reader.reading.peek .bar { transform: none; opacity: 1; }
-#reader.reading .notes-sidebar { width: 0; padding-inline: 0; opacity: 0; border-width: 0; margin-left: -.7rem; }
-#reader.reading .reader-layout { margin: 0; }
+#reader.reading #r-exit, #reader.fs #r-exit { opacity: .85; pointer-events: auto; transform: none; }
+#reader.reading .bar, #reader.fs .bar { position: absolute; left: 0; right: 0; top: 0; transform: translateY(-140%); opacity: 0; }
+#reader.reading.peek .bar, #reader.fs.peek .bar { transform: none; opacity: 1; }
+#reader.reading .notes-sidebar, #reader.fs .notes-sidebar { width: 0; padding-inline: 0; opacity: 0; border-width: 0; margin-left: -.7rem; }
+#reader.reading .reader-layout, #reader.fs .reader-layout { margin: 0; }
+#reader.fs #pages { border-radius: 0; border: 0; }
 #reader.reading #pages { border-radius: 0; border: 0; background: #efe4cf; }
 #reader.reading .pg canvas { filter: sepia(.3) saturate(.9) brightness(.97); }
 :root[data-theme="dark"] #reader.reading #pages { background: #14100c; }
@@ -465,3 +465,130 @@ input:focus, select:focus, textarea:focus { outline: 0; border-color: var(--gold
 .pf-pw[open] summary { color: var(--text); }
 @media (max-width: 700px) { .dlg { padding: 1.3rem; } .pf-av { flex-direction: column; align-items: flex-start; } }
 :root[data-theme="dark"] .dlg { background: #101b24; }
+
+/* Tab morph: old panel slides out on top while the new one slides in and the container height eases */
+.tab.leaving { position: absolute; top: 0; left: 0; right: 0; pointer-events: none; }
+.bk-line { display: flex; align-items: center; gap: .9rem; min-width: 0; }
+.mini-cv { width: 40px; height: 60px; flex: none; border-radius: 6px; background: var(--glass3) center / cover; box-shadow: 0 6px 12px -6px rgba(0,0,0,.5); }
+.hint { font-size: .78rem; color: var(--mute); margin: -.2rem 0 .4rem; }
+
+/* Mobile bottom tab bar */
+#tabbar { display: none; position: fixed; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; z-index: 40;
+  width: min(420px, calc(100% - 24px)); height: 64px; padding: 6px; border-radius: 26px; background: var(--ink);
+  box-shadow: 0 18px 40px -14px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.1); }
+#tabbar .ink { top: 6px; bottom: 6px; background: rgba(255,255,255,.17); border-radius: 20px; box-shadow: none; }
+#tabbar button { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  background: none; border: 0; border-radius: 20px; color: rgba(255,255,255,.55); font-size: .66rem; font-weight: 700; transition: color .3s var(--ease), transform .2s var(--ease); }
+#tabbar button.on { color: #fff; }
+#tabbar button:active { transform: scale(.92); }
+@keyframes barIn { from { opacity: 0; transform: translate3d(0, 34px, 0); } }
+
+/* Touch devices: no sticky hover lifts, tactile press instead */
+@media (hover: none) {
+  .book:hover, .hero-card:hover, .chips button:hover { transform: none; }
+  .book:hover .cv-wrap::after { opacity: 0; }
+}
+.book:active { transform: scale(.97); }
+
+/* ================= PHONE ================= */
+@media (max-width: 700px) {
+  body[data-screen="library"] #tabbar { display: flex; animation: barIn .55s var(--ease) backwards; }
+  .shell { width: calc(100% - 1rem); margin: .5rem auto; padding: .9rem .9rem 1.6rem; border-radius: 26px; min-height: calc(100dvh - 1rem); }
+  #library .shell { padding-bottom: 6.6rem; }
+  .top { gap: .7rem; margin-bottom: 1rem; }
+  .brand svg { width: 40px; height: 40px; }
+  .brand .serif { font-size: 1.02rem; }
+  .bar-r { gap: .4rem; flex-wrap: nowrap; margin-left: auto; }
+  .net:not(.off) { display: none; }
+  .icon-btn { width: 40px; height: 40px; }
+
+  /* search becomes a full-width pill (sections live in the bottom bar) */
+  .navpill { order: 3; width: 100%; padding: 4px; overflow: visible; }
+  .navpill nav { display: none; }
+  .sbox { flex: 1; flex-direction: row-reverse; }
+  .sbox input, .sbox.open input, .sbox:focus-within input { width: 100%; flex: 1; padding: 0 .6rem 0 1rem; font-size: 16px; }
+
+  /* hero cards become a swipeable carousel */
+  .hero { display: flex; gap: .8rem; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -.9rem 1rem; padding: 0 .9rem .5rem; scrollbar-width: none; }
+  .hero::-webkit-scrollbar { display: none; }
+  .hero-card { flex: 0 0 88%; scroll-snap-align: center; min-height: 150px; padding: 1.1rem; border-radius: 22px; }
+  .hero-t { max-width: 56%; }
+  .hero-t h2 { font-size: 1.1rem; margin: .3rem 0 .7rem; }
+  .hero-cv { right: 1rem; height: 76%; }
+
+  .chips button[data-f="all"], .chips button[data-f="recents"], .chips button[data-f="saved"], .chips button[data-f="fav"] { display: none; }   /* the bottom bar already covers these */
+  .chips { margin: 0 -.9rem .2rem; padding: .2rem .9rem .8rem; gap: .6rem; }
+  .sec-head { margin: .2rem 0 .9rem; }
+  .sec-head h2 { font-size: 1.2rem; }
+  .grid { grid-template-columns: repeat(2, 1fr); gap: 1.3rem .8rem; }
+  .book h3 { font-size: .82rem; }
+
+  /* detail */
+  .d-body { gap: 1.4rem; padding: .4rem 0 1rem; }
+  #d-cover { width: min(230px, 60vw); }
+  .d-info { padding: 1.3rem; text-align: center; }
+  .d-meta, .d-actions { justify-content: center; }
+  .d-actions .btn.big { flex: 1 1 100%; }
+
+  /* admin */
+  .row { flex-direction: column; align-items: stretch; gap: .8rem; padding: .9rem 1rem; }
+  .row .act { justify-content: flex-start; }
+  .row .act .btn, .row .act select { flex: 1 1 auto; }
+
+  /* reader */
+  #reader .bar { margin: .4rem .4rem 0; padding: .5rem .7rem; gap: .5rem; border-radius: 24px; min-height: 0; }
+  #reader #r-back { order: 1; }
+  #reader .r-title { order: 2; align-items: flex-start; text-align: left; }
+  #reader .tools { order: 3; width: 100%; flex-wrap: wrap; justify-content: center; gap: .3rem; }
+  #reader #r-save { flex: 1 1 100%; }
+  #reader .tools .icon-btn { width: 36px; height: 36px; }
+  #reader .tools .btn { padding: 0 .8rem; font-size: .78rem; min-height: 36px; }
+  .reader-layout { margin: .4rem; }
+  #pages { padding: .6rem; }
+}
+
+/* Notes/bookmarks become a bottom sheet on tablets and phones */
+@media (max-width: 900px) {
+  .notes-sidebar { display: flex; position: fixed; left: .6rem; right: .6rem; bottom: .6rem; width: auto; z-index: 45; height: min(52dvh, 420px);
+    transform: translate3d(0, 120%, 0); transition: transform .45s var(--ease); box-shadow: 0 -16px 40px -12px rgba(0,0,0,.5); }
+  #reader.sheet .notes-sidebar { transform: none; }
+  #reader.noside .notes-sidebar { width: auto; padding: 1.2rem; opacity: 1; border-width: 1px; margin: 0; }
+}
+
+/* ID field with the fixed JCC- alias */
+.idbox { display: flex; align-items: stretch; margin-top: .4rem; border: 1px solid var(--edge); border-radius: 12px; overflow: hidden; background: var(--glass2); transition: box-shadow .25s, border-color .25s; }
+.idbox:focus-within { box-shadow: 0 0 0 3px rgba(255,255,255,.22); border-color: rgba(255,255,255,.7); }
+.idbox b { display: grid; place-items: center; padding: 0 .85rem; font-family: 'Cinzel', serif; font-size: .95rem; letter-spacing: .06em; color: var(--text); background: rgba(0,0,0,.1); border-right: 1px solid var(--edge); user-select: none; }
+.idbox input { margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; flex: 1; min-width: 0; }
+.idbox input:focus { box-shadow: none; background: transparent; }
+.liquid .idbox { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.36); box-shadow: inset 0 2px 6px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.22); }
+.liquid .idbox b { color: #fff; background: rgba(255,255,255,.16); border-right-color: rgba(255,255,255,.3); text-shadow: 0 1px 8px rgba(0,0,0,.35); }
+.liquid .idbox input, .liquid .idbox input:focus { background: transparent; border: 0; box-shadow: none; }
+
+/* cover images */
+.cv > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; z-index: 0; user-select: none; -webkit-user-drag: none; }
+.book { contain: layout style; }
+* { -webkit-tap-highlight-color: transparent; }
+#chips:empty { display: none; }
+
+/* search: indicator when it has closed itself but a filter is active */
+.sbox button { position: relative; }
+#s-btn.has-q::after { content: ""; position: absolute; top: 1px; right: 1px; width: 10px; height: 10px; border-radius: 50%; background: #f0b429; box-shadow: 0 0 0 2px var(--ink); }
+#q-flag i { font-style: normal; font-weight: 700; color: var(--text); }
+#q-flag a { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+
+/* user groups */
+.grp-h { display: flex; align-items: center; gap: .6rem; margin: 1.2rem 0 .7rem; font-size: .78rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+.grp-h:first-child { margin-top: .2rem; }
+.grp-h span { background: var(--glass3); color: var(--text); border-radius: 99px; padding: .05rem .55rem; letter-spacing: 0; }
+#usr-seg { margin-bottom: 1rem; }
+#usr-seg button b { font-size: .7rem; opacity: .65; margin-left: .25rem; font-weight: 700; }
+
+/* book-opening page: flat paper + a spine strip that fades out (nothing to stretch into odd corners) */
+.bk-page { background: #fffdf8 !important; overflow: hidden; }
+.bk-spine { position: absolute; left: 0; top: 0; bottom: 0; width: 7%; background: linear-gradient(90deg, #e6dcc3, rgba(255,253,248,0)); }
+
+/* No page scrollbar, ever: it appeared/vanished during screen changes and shifted the layout by its width.
+   Scrolling (wheel, touch, keyboard) still works; the reader's own page scroller is unaffected. */
+html { scrollbar-width: none; -ms-overflow-style: none; }
+html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; display: none; }

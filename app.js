@@ -57,6 +57,8 @@ const IC = {
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   star: '<polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9"/>',
   cap: '<path d="M22 10 12 5 2 10l10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>',
+  expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
+  shrink: '<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>',
   bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>',
   chev: '<path d="m6 9 6 6 6-6"/>',
   shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
@@ -102,6 +104,8 @@ function show(id, { morph = false, instant = false } = {}) {
   if (from === next) return;
   const t = ++showTok;
   if (from) scrollMem[from.id] = scrollY;
+  document.body.dataset.screen = id;
+  if (from && from.id === 'reader' && $('#reader').classList.contains('fs')) toggleFull(false);
   const clean = () => all.forEach((s) => { if (s !== next) { s.classList.remove('on', 'out', 'ghost'); s.style.top = ''; } });
   const enter = () => {
     next.classList.remove('out', 'ghost', 'fade', 'inst');
@@ -140,6 +144,8 @@ function flyCover(src, dst, ms = 640, srcRect) {
 /* Sliding indicator for pill navs */
 function slideInk(nav) {
   const ink = nav && nav.querySelector('.ink'), on = nav && nav.querySelector('button.on');
+  if (ink && !on) { ink.style.opacity = 0; return; }
+  if (ink) ink.style.opacity = '';
   if (!ink || !on || !on.offsetWidth) return;
   const first = !ink.style.width;
   if (first) ink.style.transition = 'none';
@@ -147,7 +153,7 @@ function slideInk(nav) {
   ink.style.transform = `translate3d(${on.offsetLeft}px,0,0)`;
   if (first) { void ink.offsetWidth; ink.style.transition = ''; }
 }
-function syncInks() { slideInk($('#nav')); slideInk($('#tabs')); }
+function syncInks() { slideInk($('#nav')); slideInk($('#tabs')); slideInk($('#tabbar')); slideInk($('#usr-seg')); }
 addEventListener('resize', debounce(syncInks, 120));
 
 /* ---------- Storage ---------- */
@@ -218,17 +224,24 @@ document.querySelectorAll('[data-sw]').forEach((a) => a.onclick = (e) => {
   setTimeout(() => { from.hidden = true; from.classList.remove('swap-out'); to.hidden = false; }, 220);
 });
 
+/* every ID starts with the fixed alias JCC- ; the person only types the number */
+const jid = (v) => v.trim().replace(/^jcc[-_ ]?/i, '').toLowerCase();
 $('#login').onsubmit = async (e) => {
   e.preventDefault(); err('#l-err', '');
-  const { error } = await sb.auth.signInWithPassword({ email: mail($('#l-id').value.trim()), password: $('#l-pw').value });
-  if (error) return err('#l-err', navigator.onLine ? 'Invalid User ID or password.' : 'Offline mode: Sign in online first.');
-  boot();
+  const sfx = jid($('#l-id').value), pw = $('#l-pw').value, btn = e.target.querySelector('.btn.dark');
+  if (!sfx) return err('#l-err', 'Enter your number after JCC-.');
+  btn.disabled = true;
+  try {
+    let { error } = await sb.auth.signInWithPassword({ email: mail('jcc-' + sfx), password: pw });
+    if (error && navigator.onLine) ({ error } = await sb.auth.signInWithPassword({ email: mail(sfx), password: pw }));   // accounts created before the JCC- format
+    if (error) return err('#l-err', navigator.onLine ? 'Invalid User ID or password.' : 'Offline mode: Sign in online first.');
+    boot();
+  } finally { btn.disabled = false; }
 };
-
 $('#register').onsubmit = async (e) => {
   e.preventDefault(); err('#r-err', '');
-  const id = $('#r-id').value.trim(), pw = $('#r-pw').value;
-  if (!/^[a-zA-Z0-9_.-]{3,20}$/.test(id)) return err('#r-err', 'User ID: 3–20 alphanumeric chars, . _ - allowed.');
+  const sfx = jid($('#r-id').value), pw = $('#r-pw').value, id = 'jcc-' + sfx;
+  if (!/^[a-z0-9._-]{1,16}$/.test(sfx)) return err('#r-err', 'Enter your number after JCC- (letters or numbers, up to 16 characters).');
   if (pw !== $('#r-pw2').value) return err('#r-err', 'Passwords do not match.');
   const { error } = await sb.auth.signUp({
     email: mail(id), password: pw,
@@ -313,8 +326,23 @@ async function markRecentlyRead(bookId) {
 }
 
 const hueOf = (t) => ([...t].reduce((a, c) => a + c.charCodeAt(0), 0) % 40) + 130;
+const coverCache = new Map();
+function coverSrc(b) {
+  if (!b.cover) return '';
+  const key = b.id + ':' + b.cover.length + b.cover.slice(-20);
+  let u = coverCache.get(key);
+  if (!u) {
+    try {
+      const bin = atob(b.cover.slice(b.cover.indexOf(',') + 1)), arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      u = URL.createObjectURL(new Blob([arr], { type: (b.cover.match(/^data:([^;]+)/) || [])[1] || 'image/jpeg' }));
+    } catch { u = b.cover; }
+    coverCache.set(key, u);
+  }
+  return u;
+}
 const coverHTML = (b, cls = '') => b.cover
-  ? `<div class="cv ${cls}" style="background-image:url(${b.cover})"></div>`
+  ? `<div class="cv ${cls}"><img src="${coverSrc(b)}" alt="" decoding="async" ${cls.includes('hero') ? '' : 'loading="lazy"'} draggable="false"></div>`
   : `<div class="cv gen ${cls}" style="--h:${hueOf(b.title)}"><b>${esc(b.title)}</b></div>`;
 
 function renderHero() {
@@ -336,15 +364,15 @@ function render(opts = {}) {
   renderHero();
 
   const genres = [...new Set(books.map((b) => b.genre))];
-  const cats = [['all', 'All Books', 'book'], ['recents', 'Recents', 'clock'], ['saved', 'Saved Offline', 'download'], ['fav', 'Favorites', 'heart'], ...genres.map((g) => [g, g, GI[g] || 'book'])];
+  const cats = genres.map((g) => [g, g, GI[g] || 'book']);
   const sig = cats.map((c) => c.join()).join('|');
   if (sig !== chipSig) {            // only rebuild chips when the category set changes, so the active-state morph can animate
     chipSig = sig;
     $('#chips').innerHTML = cats.map(([k, l, i]) => `<button data-f="${esc(k)}">${ico(i, 20)}<span>${esc(l)}</span></button>`).join('');
   }
   $('#chips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.f === filter));
-  document.querySelectorAll('#nav button').forEach((b) => b.classList.toggle('on', b.dataset.f === filter));
-  requestAnimationFrame(() => slideInk($('#nav')));
+  document.querySelectorAll('#nav button, #tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.f === filter));
+  requestAnimationFrame(syncInks);
   const label = (cats.find((c) => c[0] === filter) || [])[1] || 'All Books';
   $('#sec-title').textContent = filter === 'all' ? 'Library Catalog' : genres.includes(filter) ? `Trending in ${label}` : label;
 
@@ -362,7 +390,7 @@ function render(opts = {}) {
   $('#grid').innerHTML = list.length ? list.map((b, i) => {
     const lastPg = localStorage.getItem(`pg:${me.id}:${b.id}`);
     const yr = b.created_at ? new Date(b.created_at).getFullYear() : '';
-    return `<article class="book ${off && !saved.has(b.id) ? 'dim' : ''}" data-id="${b.id}" tabindex="0" style="--i:${Math.min(i, 14)}">
+    return `<article class="book ${off && !saved.has(b.id) ? 'dim' : ''}" data-id="${b.id}" tabindex="0" style="--i:${Math.min(Math.min(i, 14), 10)}">
       <div class="cv-wrap">${coverHTML(b)}
         ${saved.has(b.id) ? '<i class="sv">Offline</i>' : ''}
         <button class="heart ${favs.has(b.id) ? 'fav-on' : ''}" data-fav="${b.id}" aria-label="Favorite">${ico('heart', 16)}</button>
@@ -379,12 +407,46 @@ function updateStats() {
   if ($('#st-total')) $('#st-total').textContent = books.length;
 }
 
-const setFilter = (f) => { filter = f; render(); };
-$('#chips').onclick = (e) => { const b = e.target.closest('[data-f]'); if (b) setFilter(b.dataset.f); };
+async function morphGrid(fn) {
+  const g = $('#grid');
+  if (reduced) return fn();
+  const a = g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translate3d(0,12px,0)' }], { duration: 150, easing: 'ease-in', fill: 'forwards' });
+  await a.finished.catch(() => {});
+  fn();
+  a.cancel();
+}
+function paintFilter() {
+  document.querySelectorAll('#chips button, #nav button, #tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.f === filter));
+  syncInks();
+}
+const setFilter = (f) => { if (f === filter) return; filter = f; paintFilter(); morphGrid(() => render()); };
+$('#tabbar').onclick = (e) => { const b = e.target.closest('[data-f]'); if (b) setFilter(b.dataset.f); };
+$('#chips').onclick = (e) => { const b = e.target.closest('[data-f]'); if (b) setFilter(b.dataset.f === filter ? 'all' : b.dataset.f); };
 $('#nav').onclick = (e) => { const b = e.target.closest('[data-f]'); if (b) setFilter(b.dataset.f); };
 $('#sort').onchange = (e) => { sortMode = e.target.value; render(); };
 $('#search').oninput = debounce((e) => { q = e.target.value.trim().toLowerCase(); render({ quiet: true }); }, 140);
-$('#s-btn').onclick = () => { $('.sbox').classList.toggle('open'); $('#search').focus(); };
+const sbox = document.querySelector('.sbox'), sInp = $('#search');
+let sTimer;
+function syncSearchUI() {
+  $('#s-btn').classList.toggle('has-q', !!q && !sbox.classList.contains('open'));
+  $('#q-flag').hidden = !q; $('#q-txt').textContent = sInp.value.trim();
+}
+const armSearchIdle = () => { clearTimeout(sTimer); sTimer = setTimeout(closeSearch, 3500); };
+function closeSearch() {
+  clearTimeout(sTimer); sbox.classList.remove('open'); sInp.blur();
+  if (!sInp.value.trim()) { q = ''; render({ quiet: true }); }
+  syncSearchUI();
+}
+function openSearch() { sbox.classList.add('open'); sInp.focus(); armSearchIdle(); syncSearchUI(); }
+$('#s-btn').onclick = () => (sbox.classList.contains('open') && document.activeElement === sInp ? closeSearch() : openSearch());
+sInp.addEventListener('input', () => { armSearchIdle(); setTimeout(syncSearchUI, 170); });
+sInp.addEventListener('focus', armSearchIdle);
+sInp.addEventListener('blur', () => { clearTimeout(sTimer); sTimer = setTimeout(closeSearch, 700); });
+sInp.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { sInp.value = ''; q = ''; render({ quiet: true }); closeSearch(); }
+  if (e.key === 'Enter') closeSearch();
+});
+$('#q-clear').onclick = (e) => { e.preventDefault(); sInp.value = ''; q = ''; render({ quiet: true }); syncSearchUI(); };
 
 function toggleFav(id) {
   if (favs.has(id)) { favs.delete(id); toast('Removed from favorites.'); } else { favs.add(id); toast('Added to favorites ♥'); }
@@ -434,12 +496,14 @@ function fillDetail(b) {
 function openDetail(b, srcEl) {
   if (!b) return;
   fillDetail(b);
+  prefetch(b);
   const a = srcEl ? rectOf(srcEl) : null;
   show('detail', { morph: !!srcEl });
   const dst = $('#d-cover .cv');
   if (srcEl && dst && a) flyCover(srcEl, dst, 640, a);
 }
 function closeDetail() {
+  dropPrefetch();
   const id = detailBook?.id, src = $('#d-cover .cv');
   show('library', { morph: true });
   const dst = id && (document.querySelector(`.book[data-id="${id}"] .cv`) || document.querySelector(`.hero-card[data-id="${id}"] .cv`));
@@ -460,7 +524,7 @@ async function readFlow(b) {
   const H = Math.min(vh * .6, 460), W = H * (r.width / r.height), L = (vw - W) / 2, T = (vh - H) / 2;
   const ov = document.createElement('div');
   ov.className = 'bk-ov';
-  ov.innerHTML = '<div class="bk-book"><div class="bk-page"></div><div class="bk-cover"><div class="bk-front"></div><div class="bk-back"></div></div></div>';
+  ov.innerHTML = '<div class="bk-book"><div class="bk-page"><i class="bk-spine"></i></div><div class="bk-cover"><div class="bk-front"></div><div class="bk-back"></div></div></div>';
   const book = ov.firstChild, cover = ov.querySelector('.bk-cover');
   ov.querySelector('.bk-front').append(cov.cloneNode(true));
   Object.assign(book.style, { left: L + 'px', top: T + 'px', width: W + 'px', height: H + 'px' });
@@ -471,17 +535,22 @@ async function readFlow(b) {
   let release; const ready = new Promise((res) => { release = res; });
   const o = (d, easing = EASE) => ({ duration: d, easing, fill: 'forwards' });
   const swing = 'cubic-bezier(.45,.05,.2,1)';
-  openBook(b, ready);                         // download + parse overlap with the animation
+  const opened = openBook(b, ready);          // download + parse overlap with the animation
   try {
-    ov.animate({ opacity: [0, 1] }, o(240, 'ease-out'));
-    await book.animate([{ transform: start }, { transform: 'translate3d(0,0,0) scale(1,1)' }], o(460)).finished;
-    cover.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(-172deg)' }], o(620, swing));
-    await book.animate([{ transform: 'translate3d(0,0,0)' }, { transform: `translate3d(${W / 2}px,0,0)` }], o(620, swing)).finished;
-    cover.animate({ opacity: [1, 0] }, o(140, 'ease'));
-    await book.animate([{ transform: `translate3d(${W / 2}px,0,0) scale(1,1)` }, { transform: `translate3d(${-L}px, ${-T}px, 0) scale(${vw / W}, ${vh / H})` }], o(440, 'cubic-bezier(.65,0,.25,1)')).finished;
-    release();                                // page covers the viewport: reader is swapped in underneath
+    ov.animate({ opacity: [0, 1] }, o(220, 'ease-out'));
+    await book.animate([{ transform: start }, { transform: 'translate3d(0,0,0) scale(1,1)' }], o(420)).finished;
+    cover.animate([{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(-172deg)' }], o(480, swing));
+    await book.animate([{ transform: 'translate3d(0,0,0)' }, { transform: `translate3d(${W / 2}px,0,0)` }], o(480, swing)).finished;
+    cover.animate({ opacity: [1, 0] }, o(120, 'ease'));
+    release();                                // reader is built and page 1 painted while the page grows (compositor keeps animating)
+    const pageEl = ov.querySelector('.bk-page');
+    pageEl.animate([{ borderRadius: '4px 14px 14px 4px', boxShadow: '18px 26px 50px -10px rgba(0,0,0,.55)' }, { borderRadius: '0px', boxShadow: '0 0 0 rgba(0,0,0,0)' }], o(160, 'ease-out'));
+    ov.querySelector('.bk-spine').animate({ opacity: [1, 0] }, o(160, 'ease-out'));
+    const ex = vw * 1.04, ey = vh * 1.04;        // overscan: the page always reaches past every screen edge
+    await book.animate([{ transform: `translate3d(${W / 2}px,0,0) scale(1,1)` }, { transform: `translate3d(${-L - (ex - vw) / 2}px, ${-T - (ey - vh) / 2}px, 0) scale(${ex / W}, ${ey / H})` }], o(380, 'cubic-bezier(.65,0,.25,1)')).finished;
+    await Promise.race([opened, new Promise((r) => setTimeout(r, 1600))]);
     await nextFrame();
-    await ov.animate({ opacity: [1, 0] }, o(340, 'ease')).finished;
+    await ov.animate({ opacity: [1, 0] }, o(240, 'ease')).finished;
   } catch (e) { console.warn(e); release(); }
   ov.remove();
   cov.style.visibility = '';
@@ -529,12 +598,31 @@ async function openPdf(buf) {
 const setLoadMsg = (m) => { const el = $('#ld-msg'); if (el) el.textContent = m; };
 
 /* ---------- Reader ---------- */
+/* Warm start: small books (or saved ones) download + parse while the detail page is open */
+let pre = null;
+function prefetch(b) {
+  if (pre && pre.id === b.id) return;
+  dropPrefetch();
+  const c = navigator.connection || {};
+  const light = saved.has(b.id) || ((b.size || 0) <= 12 * 1048576 && !c.saveData && !/2g/.test(c.effectiveType || ''));
+  if (!light || (!navigator.onLine && !saved.has(b.id))) return;
+  const p = fetchPdfData(b).then(openPdf);
+  p.catch(() => {});
+  pre = { id: b.id, p };
+}
+function dropPrefetch() {
+  if (!pre) return;
+  const old = pre; pre = null;
+  old.p.then((d) => d.destroy()).catch(() => {});
+}
+
 async function openBook(b, ready) {
   if (!navigator.onLine && !saved.has(b.id)) return toast('Connect online once to view this book.', 'err');
   const token = ++openToken;
   if (pdf) { pdf.destroy(); pdf = null; }
   cur = b; zoom = 1; curPage = 1;
   bms = jget(bmKey(), []); hlData = jget(hlKey(), {});
+  $('#reader').classList.remove('sheet');
   if (!ready) show('reader');
   $('#reader').classList.toggle('reading', localStorage.getItem('jcc:rm') === '1');
   $('#r-title').textContent = b.title;
@@ -544,11 +632,15 @@ async function openBook(b, ready) {
   markRecentlyRead(b.id).catch(() => {});
   const reveal = async () => { if (ready) { await ready; if (token === openToken) show('reader', { instant: true }); } };
   try {
-    setLoadMsg('Downloading document…');
-    const buf = await fetchPdfData(b);
-    if (token !== openToken) return;
-    setLoadMsg('Preparing pages…');
-    const doc = await openPdf(buf);
+    let doc = null;
+    if (pre && pre.id === b.id) { const w = pre; pre = null; try { doc = await w.p; } catch { doc = null; } }
+    if (!doc) {
+      setLoadMsg('Downloading document…');
+      const buf = await fetchPdfData(b);
+      if (token !== openToken) return;
+      setLoadMsg('Preparing pages…');
+      doc = await openPdf(buf);
+    }
     if (token !== openToken) { doc.destroy(); return; }
     pdf = doc;
     await reveal();
@@ -614,7 +706,7 @@ async function renderPage(el) {
     await pg.render({ canvasContext: ctx, viewport: renderVp }).promise;
     el.dataset.rendered = 'true';
   } catch (err) {
-    console.error(`Page ${pageNum} render error:`, err);
+    if (!(err && err.name === 'RenderingCancelledException')) console.error(`Page ${pageNum} render error:`, err);
   } finally { delete el.dataset.rendering; }
 }
 
@@ -625,11 +717,12 @@ function releasePage(el) {
   delete el.dataset.rendered;
 }
 
-let shownPg = 0;
+let shownPg = 0, builtWidth = 0;
 async function build() {
   shownPg = 0;
   if (!pdf) return;
   const box = $('#pages');
+  builtWidth = box.clientWidth;
   box.innerHTML = '';
   const first = await pdf.getPage(1);
   const viewport0 = first.getViewport({ scale: 1 });
@@ -650,8 +743,10 @@ async function build() {
   }
   const start = +localStorage.getItem(`pg:${me.id}:${cur.id}`) || 1;
   const targetEl = box.children[start - 1] || box.children[0];
-  if (targetEl) { renderPage(targetEl); box.scrollTop = Math.max(0, targetEl.offsetTop - 20); }
+  let firstPaint = Promise.resolve();
+  if (targetEl) { firstPaint = renderPage(targetEl); box.scrollTop = Math.max(0, targetEl.offsetTop - 20); }
   track();
+  await Promise.race([firstPaint, new Promise((r) => setTimeout(r, 1200))]);
 }
 
 function track() {
@@ -803,12 +898,52 @@ function toggleReading(on = !$('#reader').classList.contains('reading')) {
   $('#t-read').classList.toggle('on', on);
   try { localStorage.setItem('jcc:rm', on ? '1' : '0'); } catch {}
   if (on) toast('Reading mode on — move the mouse to the top for tools. Esc to exit.');
-  if (pdf) setTimeout(build, 520);
+  rebuildSoon();
 }
 $('#t-read').onclick = () => toggleReading();
-$('#r-exit').onclick = () => toggleReading(false);
-$('#t-side').onclick = () => { setTool('noside', !$('#reader').classList.contains('noside')); if (pdf) setTimeout(build, 520); };
-addEventListener('mousemove', (e) => { const r = $('#reader'); if (r.classList.contains('reading')) r.classList.toggle('peek', e.clientY < 70); });
+$('#r-exit').onclick = () => { if ($('#reader').classList.contains('fs')) toggleFull(false); if ($('#reader').classList.contains('reading')) toggleReading(false); };
+
+/* ---------- Full screen reading ---------- */
+const rebuildSoon = debounce(() => { if (pdf && Math.abs($('#pages').clientWidth - builtWidth) > 8) build(); }, 560);
+addEventListener('resize', () => rebuildSoon());
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+function paintFull() {
+  const on = $('#reader').classList.contains('fs');
+  $('#t-full').classList.toggle('on', on);
+  $('#t-full').innerHTML = ico(on ? 'shrink' : 'expand');
+  $('#r-exit').lastChild.textContent = on ? ' Exit full screen' : ' Exit reading mode';
+}
+async function toggleFull(on = !$('#reader').classList.contains('fs')) {
+  const r = $('#reader');
+  if (on) {
+    setTool('fs', true);
+    try { if (r.requestFullscreen) await r.requestFullscreen({ navigationUI: 'hide' }); else if (r.webkitRequestFullscreen) r.webkitRequestFullscreen(); } catch {}
+    toast('Full screen: move to the top edge for tools. Esc to exit.');
+  } else {
+    setTool('fs', false);
+    if (fsEl()) { try { await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen()); } catch {} }
+  }
+  paintFull(); rebuildSoon();
+}
+$('#t-full').onclick = () => toggleFull();
+['fullscreenchange', 'webkitfullscreenchange'].forEach((ev) => document.addEventListener(ev, () => {
+  if (!fsEl() && $('#reader').classList.contains('fs')) { setTool('fs', false); paintFull(); rebuildSoon(); }
+}));
+document.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.metaKey && !e.altKey && $('#reader').classList.contains('on') && !/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) toggleFull();
+});
+let peekT;
+addEventListener('pointerdown', (e) => {          // touch: tap the top edge to bring the tools back
+  const r = $('#reader');
+  if (e.pointerType !== 'mouse' && (r.classList.contains('fs') || r.classList.contains('reading')) && e.clientY < 90) {
+    r.classList.add('peek'); clearTimeout(peekT); peekT = setTimeout(() => r.classList.remove('peek'), 3500);
+  }
+});
+$('#t-side').onclick = () => {
+  if (matchMedia('(max-width: 900px)').matches) return setTool('sheet', !$('#reader').classList.contains('sheet'));
+  setTool('noside', !$('#reader').classList.contains('noside')); rebuildSoon();
+};
+addEventListener('mousemove', (e) => { const r = $('#reader'); if (r.classList.contains('reading') || r.classList.contains('fs')) r.classList.toggle('peek', e.clientY < 70); });
 
 /* ---------- Notes ---------- */
 function loadNotes() { $('#r-notes').value = localStorage.getItem(`note:${me.id}:${cur.id}`) || ''; }
@@ -818,24 +953,33 @@ $('#r-notes').oninput = (e) => localStorage.setItem(`note:${me.id}:${cur.id}`, e
 /* ---------- Admin ---------- */
 $('#admin-btn').onclick = () => { show('admin'); loadAdmin(); };
 $('#adm-back').onclick = () => show('library');
-function selectTab(id) {
-  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.t === id));
-  document.querySelectorAll('.tab').forEach((p) => p.classList.toggle('on', p.id === id));
+let tabBusy = false;
+function selectTab(id, animate) {
+  const tabs = [...document.querySelectorAll('#tabs button')], wrap = $('#t-wrap');
+  const from = wrap.querySelector('.tab.on'), to = $('#' + id);
+  tabs.forEach((b) => b.classList.toggle('on', b.dataset.t === id));
   slideInk($('#tabs'));
+  if (!from || from === to) { to.classList.add('on'); slideInk($('#usr-seg')); return; }
+  if (!animate || reduced) { from.classList.remove('on'); to.classList.add('on'); return; }
+  const dir = tabs.findIndex((b) => b.dataset.t === id) > tabs.findIndex((b) => b.dataset.t === from.id) ? 1 : -1;
+  tabBusy = true; setTimeout(() => { tabBusy = false; }, 480);
+  const h0 = wrap.offsetHeight;
+  from.classList.add('leaving');               // old panel floats on top, new panel takes the flow
+  to.classList.add('on');
+  slideInk($('#usr-seg'));
+  const h1 = wrap.offsetHeight;
+  wrap.style.overflow = 'hidden';
+  const opt = (d, delay = 0) => ({ duration: d, delay, easing: EASE, fill: 'both' });
+  from.animate([{ opacity: 1, transform: 'translate3d(0,0,0)' }, { opacity: 0, transform: `translate3d(${-48 * dir}px,0,0) scale(.98)` }], opt(280))
+    .finished.then(() => { from.classList.remove('on', 'leaving'); from.getAnimations().forEach((a) => a.cancel()); });
+  to.animate([{ opacity: 0, transform: `translate3d(${48 * dir}px,0,0) scale(.98)` }, { opacity: 1, transform: 'translate3d(0,0,0)' }], opt(440, 80))
+    .finished.then(() => to.getAnimations().forEach((a) => a.cancel()));
+  wrap.animate([{ height: h0 + 'px' }, { height: h1 + 'px' }], { duration: 440, easing: EASE })
+    .finished.then(() => { wrap.style.overflow = ''; });
 }
 $('#tabs').onclick = (e) => {
-  const btn = e.target.closest('button[data-t]');
-  if (!btn || btn.classList.contains('on')) return;
-  const id = btn.dataset.t, wrap = $('#t-wrap'), root = document.documentElement;
-  if (document.startViewTransition && !reduced && !root.classList.contains('vt-tab')) {
-    root.classList.add('vt-tab');
-    wrap.style.viewTransitionName = 'tabpanel';        // the panel container morphs size + cross-fades
-    const vt = document.startViewTransition(() => selectTab(id));
-    vt.finished.finally(() => { root.classList.remove('vt-tab'); wrap.style.viewTransitionName = ''; });
-  } else {
-    selectTab(id);
-    const p = $('#' + id); p.classList.add('flip'); setTimeout(() => p.classList.remove('flip'), 520);
-  }
+  const b = e.target.closest('button[data-t]');
+  if (b && !b.classList.contains('on') && !tabBusy) selectTab(b.dataset.t, true);
 };
 $('#bell').onclick = () => { show('admin'); loadAdmin(); selectTab('t-req'); };
 
@@ -854,6 +998,46 @@ async function countPending() {
   for (const el of [$('#adm-n'), $('#ap-n')]) { if (el) { el.textContent = count; el.hidden = !count; } }
 }
 
+const GROUPS = { cadet: 'Cadets', faculty: 'Faculty Members', admin: 'Admins' };
+const grpOf = (r) => (r === 'cadet' ? 'cadet' : r === 'admin' ? 'admin' : 'faculty');
+let adminUsers = [], usrGroup = 'all';
+function userRow(u) {
+  const isAdmin = u.role === 'admin';
+  return `
+    <div class="row">
+      <div><h4>${esc(u.full_name)}</h4><p>${esc((u.user_id || '').toUpperCase())}${u.role !== 'cadet' && u.role !== 'admin' ? ' · ' + esc(ROLES[u.role] || u.role) : ''}</p></div>
+      <div class="act">
+        <span class="st ${u.status}">${isAdmin ? 'admin' : u.status}</span>
+        ${isAdmin ? '' : `<select data-role="${u.id}">
+          ${Object.entries(ROLES).filter(([k]) => k !== 'admin' || true).map(([k, v]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${v}</option>`).join('')}
+        </select>
+        ${u.status === 'approved' ? `<button class="btn red" data-a="rejected" data-id="${u.id}">Revoke</button>` : `<button class="btn" data-a="approved" data-id="${u.id}">Restore</button>`}
+        <button class="btn" data-edit-user="${u.id}" data-name="${esc(u.full_name)}" data-uid="${esc(u.user_id)}">Edit</button>
+        <button class="btn red" data-del-user="${u.id}" data-name="${esc(u.full_name)}">Delete</button>`}
+      </div>
+    </div>`;
+}
+function renderUsers() {
+  const n = (g) => adminUsers.filter((u) => grpOf(u.role) === g).length;
+  document.querySelectorAll('#usr-seg button').forEach((b) => {
+    b.querySelector('b').textContent = b.dataset.g === 'all' ? adminUsers.length : n(b.dataset.g);
+    b.classList.toggle('on', b.dataset.g === usrGroup);
+  });
+  slideInk($('#usr-seg'));
+  const by = (u1, u2) => (u1.full_name || '').localeCompare(u2.full_name || '');
+  const section = (g) => {
+    const list = adminUsers.filter((u) => grpOf(u.role) === g).sort(by);
+    return list.length ? `<h5 class="grp-h">${GROUPS[g]} <span>${list.length}</span></h5>` + list.map(userRow).join('') : '';
+  };
+  const html = usrGroup === 'all' ? ['cadet', 'faculty', 'admin'].map(section).join('') : section(usrGroup);
+  $('#users-list').innerHTML = html || `<p class="empty">No ${usrGroup === 'all' ? 'users' : GROUPS[usrGroup].toLowerCase()} yet.</p>`;
+}
+$('#usr-seg').onclick = (e) => {
+  const b = e.target.closest('button[data-g]');
+  if (!b || b.dataset.g === usrGroup) return;
+  usrGroup = b.dataset.g; renderUsers();
+};
+
 async function loadAdmin() {
   const { data: us = [] } = await sb.from('profiles').select('*').order('created_at', { ascending: false });
   const pend = us.filter((u) => u.status === 'pending');
@@ -866,29 +1050,25 @@ async function loadAdmin() {
       </div>
     </div>`).join('') : '<p class="empty">No pending access requests.</p>';
 
-  $('#users-list').innerHTML = us.filter((u) => u.status !== 'pending' && u.id !== me.id).map((u) => `
-    <div class="row">
-      <div><h4>${esc(u.full_name)}</h4><p>${esc(u.user_id)}</p></div>
-      <div class="act">
-        <span class="st ${u.status}">${u.status}</span>
-        <select data-role="${u.id}">
-          ${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${v}</option>`).join('')}
-        </select>
-        ${u.status === 'approved' ? `<button class="btn red" data-a="rejected" data-id="${u.id}">Revoke</button>` : `<button class="btn" data-a="approved" data-id="${u.id}">Restore</button>`}
-        <button class="btn red" data-del-user="${u.id}" data-name="${esc(u.full_name)}">Delete</button>
-      </div>
-    </div>`).join('') || '<p class="empty">No active registered users.</p>';
+  adminUsers = us.filter((u) => u.status !== 'pending' && u.id !== me.id);
+  renderUsers();
 
   $('#books-list').innerHTML = books.map((b) => `
     <div class="row">
-      <div><h4>${esc(b.title)}</h4><p>${esc(b.author || 'N/A')} · ${esc(b.genre)} · ${(b.size / (1024 * 1024)).toFixed(1)} MB</p></div>
-      <button class="btn red" data-del="${b.id}">Delete</button>
+      <div class="bk-line"><div class="mini-cv" style="${b.cover ? `background-image:url('${coverSrc(b)}')` : ''}"></div>
+        <div><h4>${esc(b.title)}</h4><p>${esc(b.author || 'N/A')} · ${esc(b.genre)} · ${((b.size || 0) / (1024 * 1024)).toFixed(1)} MB</p></div></div>
+      <div class="act">
+        <button class="btn" data-cover-for="${b.id}">Thumbnail</button>
+        <button class="btn red" data-del="${b.id}">Delete</button>
+      </div>
     </div>`).join('') || '<p class="empty">No uploaded books in repository.</p>';
   countPending();
 }
 
 $('#admin').addEventListener('click', async (e) => {
-  const { a, id, del, delUser, name } = e.target.dataset;
+  const t = e.target.closest('button');
+  if (!t) return;
+  const { a, id, del, delUser, name, editUser, uid, coverFor } = t.dataset;
   if (a) {
     const { error } = await sb.from('profiles').update({ status: a }).eq('id', id);
     if (error) return toast(error.message, 'err');
@@ -897,15 +1077,20 @@ $('#admin').addEventListener('click', async (e) => {
   }
   if (delUser) {
     if (!confirm(`Permanently delete the account of "${name}"?\nTheir login is removed and they must register again. This cannot be undone.`)) return;
-    e.target.disabled = true;
+    t.disabled = true;
     const { error } = await sb.rpc('admin_delete_user', { target: delUser });
     if (error) {
-      e.target.disabled = false;
+      t.disabled = false;
       return toast(/admin_delete_user|schema cache/i.test(error.message) ? 'Delete function missing. Run the updated schema.sql in Supabase.' : 'Delete failed: ' + error.message, 'err');
     }
     toast('Account deleted.');
     await loadAdmin();
   }
+  if (editUser) {
+    $('#ue-form').dataset.id = editUser; $('#ue-name').value = name; $('#ue-uid').value = uid; $('#ue-err').textContent = '';
+    $('#ue-dlg').showModal();
+  }
+  if (coverFor) { coverTarget = coverFor; $('#cover-pick').click(); }
   if (del && confirm('Permanently delete this book from the server?')) {
     const b = books.find((x) => x.id === del);
     await sb.storage.from('books').remove([b.path]);
@@ -916,6 +1101,40 @@ $('#admin').addEventListener('click', async (e) => {
     toast('Book deleted.');
   }
 });
+
+/* thumbnails: any image becomes a 2:3 cover (center-cropped) */
+async function imgToCover(file) {
+  const bmp = await createImageBitmap(file), W = 320, H = 480, k = Math.max(W / bmp.width, H / bmp.height);
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
+  x.drawImage(bmp, (W - bmp.width * k) / 2, (H - bmp.height * k) / 2, bmp.width * k, bmp.height * k);
+  return c.toDataURL('image/jpeg', .82);
+}
+let coverTarget = null;
+$('#cover-pick').onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f || !coverTarget) return;
+  try {
+    const cover = await imgToCover(f);
+    const { error } = await sb.from('books').update({ cover }).eq('id', coverTarget);
+    if (error) throw error;
+    heroKey = ''; await loadBooks(); loadAdmin(); render();
+    toast('Thumbnail updated.');
+  } catch (x) { toast(x.message || 'Could not update the thumbnail.', 'err'); }
+};
+
+/* edit a member: name + User ID (login) */
+$('#ue-cancel').onclick = () => $('#ue-dlg').close();
+$('#ue-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+$('#ue-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('.btn.dark'); btn.disabled = true; $('#ue-err').textContent = '';
+  try {
+    const { error } = await sb.rpc('admin_update_user', { target: e.target.dataset.id, new_user_id: $('#ue-uid').value.trim(), new_name: $('#ue-name').value.trim() });
+    if (error) return void ($('#ue-err').textContent = /admin_update_user|schema cache/i.test(error.message) ? 'Run the updated schema.sql in Supabase first.' : error.message);
+    $('#ue-dlg').close(); toast('User updated.'); await loadAdmin();
+  } finally { btn.disabled = false; }
+};
 
 $('#admin').addEventListener('change', async (e) => {
   if (e.target.dataset.role) {
@@ -932,23 +1151,30 @@ $('#up').onsubmit = async (e) => {
   btn.disabled = true;
   btn.textContent = 'Processing PDF...';
   try {
-    const fileData = new Uint8Array(await f.arrayBuffer());
-    const d = await pdfjsLib.getDocument({ data: fileData }).promise;
-    const pg = await d.getPage(1);
-    const v = pg.getViewport({ scale: 320 / pg.getViewport({ scale: 1 }).width });
-    const c = document.createElement('canvas');
-    c.width = v.width; c.height = v.height;
-    const ctx = c.getContext('2d', { alpha: false });
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, c.width, c.height);
-    await pg.render({ canvasContext: ctx, viewport: v }).promise;
+    const cf = $('#u-cover').files[0];
+    let coverData;
+    if (cf) coverData = await imgToCover(cf);
+    else {
+      const fileData = new Uint8Array(await f.arrayBuffer());
+      const d = await pdfjsLib.getDocument({ data: fileData }).promise;
+      const pg = await d.getPage(1);
+      const v = pg.getViewport({ scale: 320 / pg.getViewport({ scale: 1 }).width });
+      const c = document.createElement('canvas');
+      c.width = v.width; c.height = v.height;
+      const ctx = c.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      await pg.render({ canvasContext: ctx, viewport: v }).promise;
+      coverData = c.toDataURL('image/jpeg', .75);
+      d.destroy();
+    }
     const path = crypto.randomUUID() + '.pdf';
     btn.textContent = 'Uploading to Secure Storage...';
     const up = await sb.storage.from('books').upload(path, f, { contentType: 'application/pdf' });
     if (up.error) throw up.error;
     const ins = await sb.from('books').insert({
       title: $('#u-title').value.trim(), author: $('#u-author').value.trim(), genre: $('#u-genre').value,
-      path, cover: c.toDataURL('image/jpeg', .75), size: f.size
+      path, cover: coverData, size: f.size
     });
     if (ins.error) throw ins.error;
     toast('Book successfully published.');
@@ -962,56 +1188,36 @@ $('#up').onsubmit = async (e) => {
 };
 
 
-/* ---------- Profile (name, photo, password) ---------- */
-function paintAv(el, name, img) {
-  if (img && img.startsWith('data:image/')) { el.style.backgroundImage = `url('${img}')`; el.textContent = ''; }
-  else { el.style.backgroundImage = ''; el.textContent = (name || '?').trim().charAt(0).toUpperCase(); }
-}
+/* ---------- Profile (name + password) ---------- */
 function paintMe() {
   $('#who').textContent = me.full_name;
   $('#role').textContent = ROLES[me.role] || me.role;
-  paintAv($('#av'), me.full_name, me.avatar);
+  $('#av').textContent = (me.full_name || '?').trim().charAt(0).toUpperCase();
 }
-let pfAvatar = null;
 $('#prof-btn').onclick = () => {
-  pfAvatar = me.avatar || null;
-  $('#pf-name').value = me.full_name; $('#pf-uid').value = me.user_id; $('#pf-role').value = ROLES[me.role] || me.role;
+  $('#pf-name').value = me.full_name; $('#pf-uid').value = (me.user_id || '').toUpperCase(); $('#pf-role').value = ROLES[me.role] || me.role;
   $('#pf-pw').value = ''; $('#pf-pw2').value = ''; $('#pf-err').textContent = '';
   document.querySelector('.pf-pw').open = false;
-  paintAv($('#pf-av'), me.full_name, pfAvatar);
   $('#prof-dlg').showModal();
 };
 $('#pf-cancel').onclick = () => $('#prof-dlg').close();
 $('#prof-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
-$('#pf-pick').onclick = () => $('#pf-file').click();
-$('#pf-rm').onclick = () => { pfAvatar = null; paintAv($('#pf-av'), $('#pf-name').value, null); };
-$('#pf-name').oninput = (e) => { if (!pfAvatar) paintAv($('#pf-av'), e.target.value, null); };
-$('#pf-file').onchange = async (e) => {
-  const f = e.target.files[0]; e.target.value = '';
-  if (!f) return;
-  try {
-    const bmp = await createImageBitmap(f), S = 192, m = Math.min(bmp.width, bmp.height);
-    const c = document.createElement('canvas'); c.width = c.height = S;
-    c.getContext('2d').drawImage(bmp, (bmp.width - m) / 2, (bmp.height - m) / 2, m, m, 0, 0, S, S);
-    pfAvatar = c.toDataURL('image/jpeg', .82);          // ~8 KB, stored with the profile
-    paintAv($('#pf-av'), '', pfAvatar);
-  } catch { toast('Could not read that image.', 'err'); }
-};
 $('#prof-form').onsubmit = async (e) => {
   e.preventDefault();
-  const name = $('#pf-name').value.trim(), pw = $('#pf-pw').value, btn = e.submitter || e.target.querySelector('.btn.dark');
-  if (name.length < 2) return err('#pf-err', 'Please enter your full name.');
-  if (pw && pw.length < 6) return err('#pf-err', 'Password must be at least 6 characters.');
-  if (pw && pw !== $('#pf-pw2').value) return err('#pf-err', 'Passwords do not match.');
-  btn.disabled = true; err('#pf-err', '');
+  const name = $('#pf-name').value.trim(), pw = $('#pf-pw').value, btn = e.target.querySelector('.btn.dark');
+  const fail = (m) => { $('#pf-err').textContent = m; };
+  if (name.length < 2) return fail('Please enter your full name.');
+  if (pw && pw.length < 6) return fail('Password must be at least 6 characters.');
+  if (pw && pw !== $('#pf-pw2').value) return fail('Passwords do not match.');
+  btn.disabled = true; fail('');
   try {
-    const { error } = await sb.rpc('update_my_profile', { p_name: name, p_avatar: pfAvatar });
-    if (error) return err('#pf-err', /update_my_profile|schema cache/i.test(error.message) ? 'Profile editing needs the updated schema.sql in Supabase.' : error.message);
+    const { error } = await sb.rpc('update_my_name', { p_name: name });
+    if (error) return fail(/update_my_name|schema cache/i.test(error.message) ? 'Profile editing needs the updated schema.sql in Supabase.' : error.message);
     if (pw) {
       const r = await sb.auth.updateUser({ password: pw });
-      if (r.error) return err('#pf-err', 'Profile saved, but password was not changed: ' + r.error.message);
+      if (r.error) return fail('Name saved, but the password was not changed: ' + r.error.message);
     }
-    me = { ...me, full_name: name, avatar: pfAvatar };
+    me = { ...me, full_name: name };
     kv.set('profile', me).catch(() => {});
     paintMe();
     $('#prof-dlg').close();
@@ -1047,4 +1253,5 @@ document.querySelectorAll('.liquid').forEach((c) => {
   });
 });
 
+document.body.dataset.screen = (document.querySelector('.screen.on') || {}).id || 'auth';
 boot();
