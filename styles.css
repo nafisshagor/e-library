@@ -592,3 +592,91 @@ input:focus, select:focus, textarea:focus { outline: 0; border-color: var(--gold
    Scrolling (wheel, touch, keyboard) still works; the reader's own page scroller is unaffected. */
 html { scrollbar-width: none; -ms-overflow-style: none; }
 html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+
+/* ===================== v2: colleges, cadet manager, polish ===================== */
+.idbox select { margin: 0; width: auto; flex: none; border: 0; border-radius: 0; box-shadow: none; cursor: pointer; padding: 0 .3rem 0 .8rem;
+  font: 700 .92rem 'Cinzel', serif; letter-spacing: .04em; color: var(--text); background: rgba(0,0,0,.1); }
+.idbox select:focus { box-shadow: none; background: rgba(0,0,0,.16); }
+.idbox > b { padding: 0 .35rem; background: transparent !important; border: 0 !important; }
+.liquid .idbox select { color: #fff; background: rgba(255,255,255,.18); border: 0; box-shadow: none; }
+.liquid .idbox select:focus { background: rgba(255,255,255,.26); }
+.idbox input { letter-spacing: .25em; font-weight: 600; }
+
+.dlg.wide { width: min(640px, calc(100vw - 2rem)); }
+.dlg label { margin-bottom: .7rem; }
+.dlg .two { gap: .9rem; }
+
+.cad-bar { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 1rem; padding: 1.1rem 1.3rem; margin-bottom: 1rem; }
+.cad-bar label { margin: 0; }
+.cad-tools { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-bottom: .6rem; }
+.cad-tools span { color: var(--mute); font-size: .8rem; font-weight: 600; margin-left: auto; }
+.row.cad { justify-content: flex-start; gap: 1rem; animation: cardIn .5s var(--ease) backwards; animation-delay: calc(var(--i, 0) * 35ms); }
+.row.cad .cad-name { flex: 1; min-width: 160px; }
+.row.cad .act { margin-left: auto; }
+.pick { margin: 0 !important; display: grid; place-items: center; }
+.pick input { width: 20px; height: 20px; margin: 0; padding: 0; accent-color: var(--gold); cursor: pointer; }
+.cad-id { display: flex; align-items: center; gap: .5rem; flex: none; }
+.cad-id b { font: 700 1.05rem 'Cinzel', serif; letter-spacing: .08em; }
+.col-pill { font-size: .68rem; font-weight: 800; letter-spacing: .06em; padding: .2rem .6rem; border-radius: 99px; background: var(--ink); color: #fff; }
+.st.pending { background: rgba(224,169,44,.2); color: var(--gold); }
+.cad-tools #cf-set { min-width: 0; }
+
+/* richer rows, buttons, cards */
+.row { transition: transform .35s var(--ease), box-shadow .35s var(--ease), background .25s; }
+.row:hover { transform: translateY(-2px); background: var(--glass2); box-shadow: 0 14px 28px -16px rgba(0,0,0,.45); }
+.tab.on .row { animation: cardIn .5s var(--ease) backwards; }
+.btn { position: relative; overflow: hidden; }
+.btn::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.35) 50%, transparent 70%);
+  transform: translate3d(-120%, 0, 0); transition: transform .7s var(--ease); pointer-events: none; }
+.btn:hover::after { transform: translate3d(120%, 0, 0); }
+
+/* ambient drifting orbs (transform only) */
+#bg i { display: block; position: absolute; border-radius: 50%; filter: blur(70px); opacity: .45; will-change: transform; animation: drift 26s ease-in-out infinite alternate; }
+#bg i:nth-child(1) { width: 38vw; height: 38vw; left: -8vw; top: -10vw; background: var(--orb1); }
+#bg i:nth-child(2) { width: 34vw; height: 34vw; right: -6vw; top: 30vh; background: var(--orb2); animation-duration: 32s; animation-delay: -8s; }
+#bg i:nth-child(3) { width: 30vw; height: 30vw; left: 30vw; bottom: -12vw; background: var(--orb3); animation-duration: 38s; animation-delay: -15s; }
+@keyframes drift { to { transform: translate3d(7vw, -5vh, 0) scale(1.18); } }
+
+/* brand + headings */
+.brand svg { transition: transform .6s var(--ease); }
+.brand:hover svg { transform: rotate(360deg) scale(1.08); }
+.art h1 { background: linear-gradient(120deg, #fff 30%, #ffe3a6 50%, #fff 70%); background-size: 220% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shine 7s ease-in-out infinite; text-shadow: none; filter: drop-shadow(0 4px 24px rgba(0,0,0,.45)); }
+@keyframes shine { 0%, 100% { background-position: 100% 0; } 50% { background-position: 0 0; } }
+.art .crest { animation: floaty 6s ease-in-out infinite; }
+.brand-hero > *, .art-foot { animation: cardIn .8s var(--ease) backwards; }
+.brand-hero > :nth-child(2) { animation-delay: .1s; } .brand-hero > :nth-child(3) { animation-delay: .2s; }
+@keyframes floaty { 50% { transform: translate3d(0, -8px, 0); } }
+.hero-cv { animation: floaty 7s ease-in-out infinite; }
+.hero-card.b .hero-cv { animation-delay: -3s; }
+
+/* books */
+.book .cv { transition: transform .5s var(--ease), box-shadow .5s var(--ease); }
+.book:hover .cv { transform: perspective(700px) rotateY(-6deg) rotateX(2deg) scale(1.03); }
+.cv > img { animation: fadeOnly .5s ease backwards; }
+.heart.fav-on { animation: pop .45s var(--ease); background: #fff; }
+@keyframes pop { 40% { transform: scale(1.4); } }
+.chips button.on svg { animation: pop .5s var(--ease); }
+.sv { animation: cardIn .5s var(--ease) backwards; }
+.d-info > * { animation: cardIn .6s var(--ease) backwards; }
+.d-info > :nth-child(2) { animation-delay: .06s; } .d-info > :nth-child(3) { animation-delay: .12s; }
+.d-info > :nth-child(4) { animation-delay: .18s; } .d-info > :nth-child(5) { animation-delay: .24s; }
+
+/* toasts get a countdown line */
+.toast { position: relative; overflow: hidden; }
+.toast::after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: var(--gold); transform-origin: left; animation: tcount 3.7s linear forwards; }
+@keyframes tcount { to { transform: scaleX(0); } }
+
+/* reader pages */
+.pg { animation: fadeOnly .4s ease backwards; transition: box-shadow .3s; }
+.notes-sidebar textarea { line-height: 1.6; }
+.menu button { transition: background .2s, transform .2s var(--ease); } .menu button:hover { transform: translateX(3px); }
+.pulse { box-shadow: 0 0 0 0 rgba(0,0,0,.3); }
+
+@media (max-width: 700px) {
+  .cad-bar { grid-template-columns: 1fr; }
+  .row.cad { flex-wrap: wrap; }
+  .row.cad .act { margin-left: 0; width: 100%; }
+  .cad-tools span { width: 100%; margin: 0; }
+  .idbox select { padding-left: .6rem; font-size: .85rem; }
+}

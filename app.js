@@ -23,6 +23,7 @@ const pdfReady = (async () => {
   } catch (err) { console.warn('PDF worker: using CDN URL directly.', err); }
 })();
 
+const COLLEGES = ['FCC','JCC','MCC','RCC','BCC','PCC','CCR','SCC','MGCC','CCC','FGCC','JGCC'];
 const ROLES = { cadet: 'Cadet', faculty: 'Faculty Member', principal: 'Principal', vice_principal: 'Vice-Principal', adjutant: 'Adjutant', admin: 'Admin' };
 
 const $ = (s) => document.querySelector(s);
@@ -54,7 +55,6 @@ const IC = {
   glasses: '<circle cx="6" cy="15" r="4"/><circle cx="18" cy="15" r="4"/><path d="M14 15a2 2 0 0 0-4 0M2.5 13 5 7c.7-1.3 1.4-2 3-2M21.5 13 19 7c-.7-1.3-1.5-2-3-2"/>',
   flask: '<path d="M9 3h6M10 3v6L4 19a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-6-10V3"/>',
   landmark: '<path d="M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7M12 2 3 7h18z"/>',
-  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   star: '<polygon points="12 2 15 9 22 9.5 17 14.5 18.5 22 12 18 5.5 22 7 14.5 2 9.5 9 9"/>',
   cap: '<path d="M22 10 12 5 2 10l10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>',
   expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>',
@@ -224,31 +224,42 @@ document.querySelectorAll('[data-sw]').forEach((a) => a.onclick = (e) => {
   setTimeout(() => { from.hidden = true; from.classList.remove('swap-out'); to.hidden = false; }, 220);
 });
 
-/* every ID starts with the fixed alias JCC- ; the person only types the number */
-const jid = (v) => v.trim().replace(/^jcc[-_ ]?/i, '').toLowerCase();
+/* every ID is COLLEGE-NNNN : a college dropdown + a 4-digit number. JCC-0001 is reserved for the admin. */
+const digits = (v) => String(v || '').replace(/\D/g, '');
+const padNo = (v) => digits(v).slice(0, 4).padStart(4, '0');
+document.querySelectorAll('.col-sel').forEach((s) => { s.innerHTML = COLLEGES.map((c) => `<option value="${c}"${c === 'JCC' ? ' selected' : ''}>${c}</option>`).join(''); });
+['#l-id', '#r-id', '#ue-no'].forEach((s) => $(s).addEventListener('input', (e) => { e.target.value = digits(e.target.value).slice(0, 4); }));
 $('#login').onsubmit = async (e) => {
   e.preventDefault(); err('#l-err', '');
-  const sfx = jid($('#l-id').value), pw = $('#l-pw').value, btn = e.target.querySelector('.btn.dark');
-  if (!sfx) return err('#l-err', 'Enter your number after JCC-.');
+  const col = $('#l-col').value.toLowerCase(), raw = digits($('#l-id').value), pw = $('#l-pw').value, btn = e.target.querySelector('.btn.dark');
+  if (!raw) return err('#l-err', 'Enter your 4-digit number.');
   btn.disabled = true;
   try {
-    let { error } = await sb.auth.signInWithPassword({ email: mail('jcc-' + sfx), password: pw });
-    if (error && navigator.onLine) ({ error } = await sb.auth.signInWithPassword({ email: mail(sfx), password: pw }));   // accounts created before the JCC- format
+    let error;
+    for (const id of new Set([col + '-' + padNo(raw), col + '-' + raw])) {
+      ({ error } = await sb.auth.signInWithPassword({ email: mail(id), password: pw }));
+      if (!error || !navigator.onLine) break;
+    }
     if (error) return err('#l-err', navigator.onLine ? 'Invalid User ID or password.' : 'Offline mode: Sign in online first.');
     boot();
   } finally { btn.disabled = false; }
 };
 $('#register').onsubmit = async (e) => {
   e.preventDefault(); err('#r-err', '');
-  const sfx = jid($('#r-id').value), pw = $('#r-pw').value, id = 'jcc-' + sfx;
-  if (!/^[a-z0-9._-]{1,16}$/.test(sfx)) return err('#r-err', 'Enter your number after JCC- (letters or numbers, up to 16 characters).');
+  const col = $('#r-col').value, raw = digits($('#r-id').value), pw = $('#r-pw').value;
+  if (!raw) return err('#r-err', 'Enter your 4-digit number.');
+  const no = padNo(raw), id = (col + '-' + no).toLowerCase();
+  if (no === '0001') return err('#r-err', 'Number 0001 is reserved for the administrator.');
   if (pw !== $('#r-pw2').value) return err('#r-err', 'Passwords do not match.');
-  const { error } = await sb.auth.signUp({
-    email: mail(id), password: pw,
-    options: { data: { user_id: id.toLowerCase(), full_name: $('#r-name').value.trim(), role: $('#r-role').value } }
-  });
-  if (error) return err('#r-err', /registered|exists/i.test(error.message) ? 'That User ID is already taken.' : error.message);
-  boot();
+  const btn = e.target.querySelector('.btn.dark'); btn.disabled = true;
+  try {
+    const { error } = await sb.auth.signUp({
+      email: mail(id), password: pw,
+      options: { data: { user_id: id, college: col, cadet_no: no, full_name: $('#r-name').value.trim(), role: $('#r-role').value } }
+    });
+    if (error) return err('#r-err', /registered|exists/i.test(error.message) ? 'That User ID is already taken.' : error.message);
+    boot();
+  } finally { btn.disabled = false; }
 };
 
 document.addEventListener('click', async (e) => {
@@ -1012,7 +1023,7 @@ function userRow(u) {
           ${Object.entries(ROLES).filter(([k]) => k !== 'admin' || true).map(([k, v]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${v}</option>`).join('')}
         </select>
         ${u.status === 'approved' ? `<button class="btn red" data-a="rejected" data-id="${u.id}">Revoke</button>` : `<button class="btn" data-a="approved" data-id="${u.id}">Restore</button>`}
-        <button class="btn" data-edit-user="${u.id}" data-name="${esc(u.full_name)}" data-uid="${esc(u.user_id)}">Edit</button>
+        <button class="btn" data-edit-user="${u.id}">Edit</button>
         <button class="btn red" data-del-user="${u.id}" data-name="${esc(u.full_name)}">Delete</button>`}
       </div>
     </div>`;
@@ -1050,8 +1061,10 @@ async function loadAdmin() {
       </div>
     </div>`).join('') : '<p class="empty">No pending access requests.</p>';
 
+  allProfiles = us;
   adminUsers = us.filter((u) => u.status !== 'pending' && u.id !== me.id);
   renderUsers();
+  renderCadets();
 
   $('#books-list').innerHTML = books.map((b) => `
     <div class="row">
@@ -1086,10 +1099,7 @@ $('#admin').addEventListener('click', async (e) => {
     toast('Account deleted.');
     await loadAdmin();
   }
-  if (editUser) {
-    $('#ue-form').dataset.id = editUser; $('#ue-name').value = name; $('#ue-uid').value = uid; $('#ue-err').textContent = '';
-    $('#ue-dlg').showModal();
-  }
+  if (editUser) openEdit(editUser);
   if (coverFor) { coverTarget = coverFor; $('#cover-pick').click(); }
   if (del && confirm('Permanently delete this book from the server?')) {
     const b = books.find((x) => x.id === del);
@@ -1123,16 +1133,91 @@ $('#cover-pick').onchange = async (e) => {
   } catch (x) { toast(x.message || 'Could not update the thumbnail.', 'err'); }
 };
 
-/* edit a member: name + User ID (login) */
+/* ---------- Cadet management ---------- */
+let allProfiles = [], cadF = { col: '', intake: '', q: '' };
+const picked = new Set();
+const cadLabel = (u) => (u.college || (u.user_id || '').split('-')[0] || '').toUpperCase();
+const cadNo = (u) => u.cadet_no || (u.user_id || '').split('-')[1] || '—';
+$('#cf-col').innerHTML = '<option value="">All colleges</option>' + COLLEGES.map((c) => `<option>${c}</option>`).join('');
+function cadRow(u, i) {
+  return `<div class="row cad" style="--i:${Math.min(i, 12)}">
+    <label class="pick"><input type="checkbox" data-pick="${u.id}" ${picked.has(u.id) ? 'checked' : ''} aria-label="Select"></label>
+    <div class="cad-id"><span class="col-pill">${esc(cadLabel(u))}</span><b>${esc(cadNo(u))}</b></div>
+    <div class="cad-name"><h4>${esc(u.full_name)}</h4><p>${esc((u.user_id || '').toUpperCase())}${u.house ? ' · ' + esc(u.house) : ''}${u.phone ? ' · ' + esc(u.phone) : ''}</p></div>
+    <div class="act"><span class="st ${u.status}">${u.status}</span>
+      <button class="btn" data-edit-user="${u.id}">Edit</button>
+      ${u.status === 'approved' ? `<button class="btn red" data-a="rejected" data-id="${u.id}">Revoke</button>` : `<button class="btn" data-a="approved" data-id="${u.id}">Approve</button>`}
+      <button class="btn red" data-del-user="${u.id}" data-name="${esc(u.full_name)}">Delete</button></div>
+  </div>`;
+}
+let shownCads = [];
+function renderCadets() {
+  const cads = allProfiles.filter((u) => u.role === 'cadet');
+  const ints = [...new Set(cads.map((u) => u.intake).filter(Boolean))].sort((x, y) => String(y).localeCompare(String(x), undefined, { numeric: true }));
+  const sel = $('#cf-int');
+  sel.innerHTML = '<option value="">All intakes</option><option value="__none">Unassigned</option>' + ints.map((i) => `<option value="${esc(i)}">Intake ${esc(i)}</option>`).join('');
+  sel.value = cadF.intake;
+  const q = cadF.q.toLowerCase();
+  shownCads = cads.filter((u) =>
+    (!cadF.col || cadLabel(u) === cadF.col) &&
+    (!cadF.intake || (cadF.intake === '__none' ? !u.intake : u.intake === cadF.intake)) &&
+    (!q || (u.full_name + ' ' + u.user_id + ' ' + cadNo(u)).toLowerCase().includes(q)));
+  const groups = {};
+  shownCads.forEach((u) => (groups[u.intake || '__none'] = groups[u.intake || '__none'] || []).push(u));
+  const keys = Object.keys(groups).sort((x, y) => x === '__none' ? 1 : y === '__none' ? -1 : String(y).localeCompare(String(x), undefined, { numeric: true }));
+  const ord = (u) => COLLEGES.indexOf(cadLabel(u)) * 1e5 + (+cadNo(u) || 0);
+  $('#cad-list').innerHTML = keys.map((k) => {
+    const list = groups[k].sort((x, y) => ord(x) - ord(y));
+    return `<h5 class="grp-h">${k === '__none' ? 'Unassigned intake' : 'Intake ' + esc(k)} <span>${list.length}</span></h5>` + list.map(cadRow).join('');
+  }).join('') || '<p class="empty">No cadets match these filters.</p>';
+  updPick();
+}
+function updPick() {
+  for (const id of [...picked]) if (!allProfiles.some((u) => u.id === id)) picked.delete(id);
+  $('#cf-n').textContent = `${shownCads.length} shown · ${picked.size} selected`;
+}
+$('#cf-col').onchange = (e) => { cadF.col = e.target.value; renderCadets(); };
+$('#cf-int').onchange = (e) => { cadF.intake = e.target.value; renderCadets(); };
+$('#cf-q').oninput = debounce((e) => { cadF.q = e.target.value.trim(); renderCadets(); }, 150);
+$('#cf-all').onclick = () => { shownCads.forEach((u) => picked.add(u.id)); renderCadets(); };
+$('#cf-clr').onclick = () => { picked.clear(); renderCadets(); };
+$('#cad-list').addEventListener('change', (e) => {
+  const id = e.target.dataset.pick; if (!id) return;
+  e.target.checked ? picked.add(id) : picked.delete(id); updPick();
+});
+$('#cf-set').onclick = async () => {
+  if (!picked.size) return toast('Select at least one cadet first.', 'err');
+  const v = prompt(`Set intake for ${picked.size} selected cadet(s).\nExample: 2024  (leave empty to clear)`);
+  if (v === null) return;
+  const { error } = await sb.from('profiles').update({ intake: v.trim() || null }).in('id', [...picked]);
+  if (error) return toast(/intake|column/i.test(error.message) ? 'Run the updated schema.sql in Supabase first.' : error.message, 'err');
+  toast('Intake updated.'); picked.clear(); loadAdmin();
+};
+
+/* edit a member: every detail */
+const F = { name: 'full_name', intake: 'intake', house: 'house', blood: 'blood_group', phone: 'phone', gname: 'guardian_name', gphone: 'guardian_phone', addr: 'address', notes: 'notes' };
+function openEdit(id) {
+  const u = allProfiles.find((x) => x.id === id); if (!u) return;
+  $('#ue-form').dataset.id = id; $('#ue-err').textContent = '';
+  for (const [k, c] of Object.entries(F)) $('#ue-' + k).value = u[c] || '';
+  $('#ue-col').value = COLLEGES.includes(cadLabel(u)) ? cadLabel(u) : 'JCC';
+  $('#ue-no').value = /^\d+$/.test(cadNo(u)) ? padNo(cadNo(u)) : '';
+  $('#ue-role').value = u.role; $('#ue-status').value = u.status;
+  $('#ue-dlg').showModal();
+}
 $('#ue-cancel').onclick = () => $('#ue-dlg').close();
 $('#ue-dlg').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#ue-form').onsubmit = async (e) => {
   e.preventDefault();
   const btn = e.target.querySelector('.btn.dark'); btn.disabled = true; $('#ue-err').textContent = '';
   try {
-    const { error } = await sb.rpc('admin_update_user', { target: e.target.dataset.id, new_user_id: $('#ue-uid').value.trim(), new_name: $('#ue-name').value.trim() });
-    if (error) return void ($('#ue-err').textContent = /admin_update_user|schema cache/i.test(error.message) ? 'Run the updated schema.sql in Supabase first.' : error.message);
-    $('#ue-dlg').close(); toast('User updated.'); await loadAdmin();
+    const col = $('#ue-col').value, no = padNo($('#ue-no').value);
+    if (!digits($('#ue-no').value)) return void ($('#ue-err').textContent = 'Enter the 4-digit cadet number.');
+    const p = { user_id: (col + '-' + no).toLowerCase(), college: col, cadet_no: no, role: $('#ue-role').value, status: $('#ue-status').value };
+    for (const [k, c] of Object.entries(F)) p[c] = $('#ue-' + k).value.trim();
+    const { error } = await sb.rpc('admin_update_profile', { target: e.target.dataset.id, p });
+    if (error) return void ($('#ue-err').textContent = /admin_update_profile|schema cache/i.test(error.message) ? 'Run the updated schema.sql in Supabase first.' : /duplicate|unique/i.test(error.message) ? 'That college + number is already used.' : error.message);
+    $('#ue-dlg').close(); toast('Member updated.'); await loadAdmin();
   } finally { btn.disabled = false; }
 };
 

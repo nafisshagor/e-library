@@ -45,7 +45,7 @@
     <div class="auth-side">
       <form id="login" class="card glass liquid">
         <h2>Portal Sign In</h2>
-        <label>User ID<span class="idbox"><b>JCC-</b><input id="l-id" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text" maxlength="20" placeholder="Cadet number"></span></label>
+        <label>College &amp; Number<span class="idbox"><select id="l-col" class="col-sel" aria-label="College"></select><b>-</b><input id="l-id" required autocomplete="username" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="0000"></span></label>
         <label>Password<input id="l-pw" type="password" required autocomplete="current-password" placeholder="••••••••"></label>
         <button class="btn dark">Sign In</button>
         <p class="err" id="l-err"></p>
@@ -53,7 +53,7 @@
       </form>
       <form id="register" class="card glass liquid" hidden>
         <h2>Request Access</h2>
-        <label>User ID<span class="idbox"><b>JCC-</b><input id="r-id" required maxlength="20" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text" placeholder="Cadet number"></span></label>
+        <label>College &amp; Number<span class="idbox"><select id="r-col" class="col-sel" aria-label="College"></select><b>-</b><input id="r-id" required inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="0000"></span></label>
         <label>Full Name<input id="r-name" required placeholder="Cadet Name / Faculty Rank / Name"></label>
         <label>Role
           <select id="r-role">
@@ -169,11 +169,26 @@
     </header>
     <nav class="tabs" id="tabs"><i class="ink"></i>
       <button class="on" data-t="t-req">Access Requests <b id="ap-n" class="dot" hidden></b></button>
-      <button data-t="t-usr">Users Management</button>
+      <button data-t="t-cad">Cadet Management</button>
+      <button data-t="t-usr">Staff &amp; Users</button>
       <button data-t="t-bk">Repository Books</button>
     </nav>
     <div id="t-wrap">
     <div id="t-req" class="tab on"><div id="pending-list"></div></div>
+    <div id="t-cad" class="tab">
+      <div class="cad-bar card flat glass">
+        <label>College<select id="cf-col"></select></label>
+        <label>Intake<select id="cf-int"></select></label>
+        <label>Search<input id="cf-q" type="search" placeholder="Name or cadet number"></label>
+      </div>
+      <div class="cad-tools">
+        <button class="btn" id="cf-all">Select all shown</button>
+        <button class="btn dark" id="cf-set">Assign intake</button>
+        <button class="btn" id="cf-clr">Clear selection</button>
+        <span id="cf-n"></span>
+      </div>
+      <div id="cad-list"></div>
+    </div>
     <div id="t-usr" class="tab">
       <nav class="tabs" id="usr-seg"><i class="ink"></i>
         <button class="on" data-g="all">All <b></b></button>
@@ -268,12 +283,33 @@
   </form>
 </dialog>
 
-<dialog id="ue-dlg" class="dlg">
+<dialog id="ue-dlg" class="dlg wide">
   <form id="ue-form">
-    <h3>Edit User</h3>
+    <h3>Edit Member</h3>
     <label>Full name<input id="ue-name" required minlength="2" maxlength="60"></label>
-    <label>User ID (used to sign in)<input id="ue-uid" required minlength="3" maxlength="20" autocapitalize="none" autocorrect="off" spellcheck="false"></label>
-    <p class="hint">Format: JCC-1024 (letters, numbers, . _ - only). If you change the User ID, tell the user their new sign-in ID.</p>
+    <div class="two">
+      <label>College<select id="ue-col" class="col-sel"></select></label>
+      <label>Cadet number (4 digits)<input id="ue-no" required inputmode="numeric" maxlength="4" placeholder="0000"></label>
+    </div>
+    <div class="two">
+      <label>Intake<input id="ue-intake" maxlength="20" placeholder="e.g. 2024"></label>
+      <label>House<input id="ue-house" maxlength="40"></label>
+    </div>
+    <div class="two">
+      <label>Role<select id="ue-role"><option value="cadet">Cadet</option><option value="faculty">Faculty Member</option><option value="principal">Principal</option><option value="vice_principal">Vice-Principal</option><option value="adjutant">Adjutant</option></select></label>
+      <label>Status<select id="ue-status"><option value="approved">Approved</option><option value="pending">Pending</option><option value="rejected">Rejected</option></select></label>
+    </div>
+    <div class="two">
+      <label>Blood group<input id="ue-blood" maxlength="5" placeholder="A+"></label>
+      <label>Phone<input id="ue-phone" maxlength="20"></label>
+    </div>
+    <div class="two">
+      <label>Guardian name<input id="ue-gname" maxlength="60"></label>
+      <label>Guardian phone<input id="ue-gphone" maxlength="20"></label>
+    </div>
+    <label>Address<input id="ue-addr" maxlength="160"></label>
+    <label>Notes<textarea id="ue-notes" rows="2" maxlength="400"></textarea></label>
+    <p class="hint">Sign-in ID becomes COLLEGE-NUMBER (e.g. JCC-1024). If it changes, tell the member their new ID. Their password stays the same.</p>
     <p class="err" id="ue-err"></p>
     <div class="act end">
       <button type="button" class="btn" id="ue-cancel">Cancel</button>
